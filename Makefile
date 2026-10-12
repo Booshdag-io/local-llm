@@ -70,7 +70,9 @@ help:
 # `uv sync --frozen` on every run: a no-op when nothing changed, and it
 # removes anything the lock no longer lists. uv also fetches a matching
 # Python (3.12) if the machine has none. Optional backends the install
-# doesn't use are behind `--extra all` (see pyproject.toml).
+# doesn't use are behind `--extra all` (see pyproject.toml). The sync is
+# pinned to apps/server/.venv, the interpreter run below, so a
+# UV_PROJECT_ENVIRONMENT exported for another project can't redirect it.
 backend:
 	@envfile="$(REPO_ROOT)/infra/.env"; \
 	if [ ! -f "$$envfile" ]; then \
@@ -92,7 +94,7 @@ backend:
 		echo "make backend: uv not found -- install it (https://docs.astral.sh/uv/, e.g. \`curl -LsSf https://astral.sh/uv/install.sh | sh\`)" >&2; \
 		exit 1; \
 	fi; \
-	uv sync --frozen --no-install-project --project "$(SERVER_DIR)"; \
+	UV_PROJECT_ENVIRONMENT="$(SERVER_DIR)/.venv" uv sync --frozen --no-install-project --project "$(SERVER_DIR)"; \
 	py="$(SERVER_DIR)/.venv/bin/python"; \
 	database_url="$$(PYTHONPATH="$(SERVER_DIR)" "$$py" -c 'import sys; from local_llm.benchmarks.serving.launcher import build_database_url; print(build_database_url(sys.argv[1]))' "$$POSTGRES_PASSWORD")"; \
 	cd "$(SERVER_DIR)" && \
@@ -135,18 +137,22 @@ lint:
 
 # CI's "Backend (pytest)", including the throwaway pgvector Postgres that
 # tests/test_imports.py needs (without it that test skips locally, while CI
-# fails). The container is removed on exit, Ctrl-C included. DATA_DIR points
-# at a temp directory so tests never touch apps/server/data.
+# fails). The container is removed on exit, Ctrl-C included. DATA_DIR is the
+# suite's own temp directory (tests/conftest.py), as in CI.
+# The venv is pinned as in `backend`: `uv sync` removes what the lock doesn't
+# list, so following an inherited UV_PROJECT_ENVIRONMENT would strip another
+# project's environment.
 test-backend:
 	@cd "$(SERVER_DIR)"; \
+	export UV_PROJECT_ENVIRONMENT="$(SERVER_DIR)/.venv"; \
 	uv lock --check; \
 	uv sync --frozen --no-install-project --group dev; \
 	if ss -ltn | grep -q "127.0.0.1:$(LLLM_TEST_PG_PORT) "; then \
 		echo "make test-backend: port $(LLLM_TEST_PG_PORT) is in use -- set LLLM_TEST_PG_PORT" >&2; \
 		exit 1; \
 	fi; \
-	pg="lllm-test-pg-$$$$"; tmp="$$(mktemp -d)"; \
-	trap 'docker rm -f "$$pg" >/dev/null 2>&1; rm -rf "$$tmp"' EXIT; \
+	pg="lllm-test-pg-$$$$"; \
+	trap 'docker rm -f "$$pg" >/dev/null 2>&1' EXIT; \
 	docker run --rm -d --name "$$pg" -p "127.0.0.1:$(LLLM_TEST_PG_PORT):5432" \
 		-e POSTGRES_USER=local_llm -e POSTGRES_PASSWORD=test-only-not-a-secret -e POSTGRES_DB=local_llm \
 		pgvector/pgvector:pg16 >/dev/null; \
@@ -156,7 +162,6 @@ test-backend:
 	done; \
 	LLLM_SECRET_KEY=test-only-not-a-secret-0123456789abcdef0123456789abcdef \
 	TEST_DATABASE_URL="postgresql://local_llm:test-only-not-a-secret@127.0.0.1:$(LLLM_TEST_PG_PORT)/local_llm" \
-	DATA_DIR="$$tmp" \
 	uv run --frozen python -m pytest tests -q
 
 # CI's "Web (astro check, vitest, build)".
