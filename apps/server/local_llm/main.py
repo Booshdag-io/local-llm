@@ -201,6 +201,12 @@ from local_llm.utils import logger
 from local_llm.utils.access_control import has_permission
 from local_llm.utils.access_control.folders import has_folder_write_access
 from local_llm.utils.actions import chat_action as chat_action_handler
+from local_llm.utils.anthropic import (
+    convert_anthropic_to_openai_payload,
+    convert_openai_to_anthropic_response,
+    is_anthropic_messages_passthrough,
+    openai_stream_to_anthropic_stream,
+)
 from local_llm.utils.asgi_middleware import AppHTTPMiddleware
 from local_llm.utils.audit import AuditLevel, AuditLoggingMiddleware
 from local_llm.utils.auth import (
@@ -866,7 +872,8 @@ async def get_models(request: Request, refresh: bool = False, user=Depends(get_v
 
     if log.isEnabledFor(logging.DEBUG):
         log.debug(
-            f'/api/models returned filtered models accessible to the user: {JSONCodec.dumps([model.get("id") for model in models])}'
+            '/api/models returned filtered models accessible to the user: '
+            f'{JSONCodec.dumps([model.get("id") for model in models])}'
         )
     return {'data': models}
 
@@ -1139,7 +1146,7 @@ async def chat_completion(
         #   value  → follow-up (user message's parentId = prev assistant)
         #   absent → legacy caller, no chat management
         is_new_chat = 'parent_id' in form_data and form_data['parent_id'] is None and not form_data.get('chat_id')
-        parent_id = form_data.pop('parent_id', None)
+        form_data.pop('parent_id', None)
         form_data.pop('new_chat', None)  # Legacy field
 
         # Multi-model message_ids: list of {model_id, message_id} entries.
@@ -1844,14 +1851,6 @@ app.state.CHAT_COMPLETION_HANDLER = chat_completion
 # Anthropic Messages API Compatible Endpoint
 #
 ##################################
-
-
-from local_llm.utils.anthropic import (
-    convert_anthropic_to_openai_payload,
-    convert_openai_to_anthropic_response,
-    is_anthropic_messages_passthrough,
-    openai_stream_to_anthropic_stream,
-)
 
 
 @app.post('/api/message/count_tokens')
@@ -2748,7 +2747,10 @@ async def get_manifest_json():
         return {
             'name': app.state.LLLM_NAME,
             'short_name': app.state.LLLM_NAME,
-            'description': f'{app.state.LLLM_NAME} is an open, extensible, user-friendly interface for AI that adapts to your workflow.',
+            'description': (
+                f'{app.state.LLLM_NAME} is an open, extensible, user-friendly interface for AI that adapts to your '
+                'workflow.'
+            ),
             'start_url': '/',
             'display': 'standalone',
             'background_color': '#343541',

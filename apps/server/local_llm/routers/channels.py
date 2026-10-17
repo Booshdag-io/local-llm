@@ -1,7 +1,6 @@
 import base64
 import io
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import FileResponse, Response, StreamingResponse
@@ -234,7 +233,7 @@ async def get_all_channels(
 ############################
 
 
-@router.get('/users/{user_id}', response_model=Optional[ChannelModel])
+@router.get('/users/{user_id}', response_model=ChannelModel | None)
 async def get_dm_channel_by_user_id(
     request: Request,
     user_id: str,
@@ -292,7 +291,7 @@ async def get_dm_channel_by_user_id(
 ############################
 
 
-@router.post('/create', response_model=Optional[ChannelModel])
+@router.post('/create', response_model=ChannelModel | None)
 async def create_new_channel(
     request: Request,
     form_data: CreateChannelForm,
@@ -380,7 +379,7 @@ class ChannelFullResponse(ChannelResponse):
     unread_count: int = 0
 
 
-@router.get('/{id}', response_model=Optional[ChannelFullResponse])
+@router.get('/{id}', response_model=ChannelFullResponse | None)
 async def get_channel_by_id(
     request: Request,
     id: str,
@@ -705,7 +704,7 @@ async def remove_members_by_id(
 ############################
 
 
-@router.post('/{id}/update', response_model=Optional[ChannelModel])
+@router.post('/{id}/update', response_model=ChannelModel | None)
 async def update_channel_by_id(
     request: Request,
     id: str,
@@ -820,7 +819,7 @@ async def get_channel_messages(
         if user.role != 'admin' and not await channel_has_access(user.id, channel, permission='read', db=db):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=ERROR_MESSAGES.DEFAULT())
 
-        channel_member = await Channels.join_channel(id, user.id, db=db)  # Ensure user is a member of the channel
+        await Channels.join_channel(id, user.id, db=db)  # Ensure user is a member of the channel
 
     message_list = await Messages.get_messages_by_channel_id(id, skip, limit, db=db)
 
@@ -1072,9 +1071,14 @@ async def model_response_handler(request, channel, message, user, db=None):
                 thread_history_string = '\n\n'.join(thread_history)
                 system_message = {
                     'role': 'system',
-                    'content': f'You are {model.get("name", model_id)}, participating in a threaded conversation. Be concise and conversational.'
+                    'content': (
+                        f'You are {model.get("name", model_id)}, participating in a threaded conversation. Be concise '
+                        'and conversational.'
+                    )
                     + (
-                        f"Here's the thread history:\n\n\n{thread_history_string}\n\n\nContinue the conversation naturally as {model.get('name', model_id)}, addressing the most recent message while being aware of the full context."
+                        f"Here's the thread history:\n\n\n{thread_history_string}\n\n\nContinue the conversation "
+                        f'naturally as {model.get("name", model_id)}, addressing the most recent message while being '
+                        'aware of the full context.'
                         if thread_history
                         else ''
                     ),
@@ -1219,7 +1223,7 @@ async def new_message_handler(request: Request, id: str, form_data: MessageForm,
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.DEFAULT())
 
 
-@router.post('/{id}/messages/post', response_model=Optional[MessageModel])
+@router.post('/{id}/messages/post', response_model=MessageModel | None)
 async def post_new_message(
     request: Request,
     id: str,
@@ -1281,7 +1285,7 @@ async def post_new_message(
 ############################
 
 
-@router.get('/{id}/messages/{message_id}', response_model=Optional[MessageResponse])
+@router.get('/{id}/messages/{message_id}', response_model=MessageResponse | None)
 async def get_channel_message(
     request: Request,
     id: str,
@@ -1322,7 +1326,7 @@ async def get_channel_message(
 ############################
 
 
-@router.get('/{id}/messages/{message_id}/data', response_model=Optional[dict])
+@router.get('/{id}/messages/{message_id}/data', response_model=dict | None)
 async def get_channel_message_data(
     request: Request,
     id: str,
@@ -1361,7 +1365,7 @@ class PinMessageForm(BaseModel):
     is_pinned: bool
 
 
-@router.post('/{id}/messages/{message_id}/pin', response_model=Optional[MessageUserResponse])
+@router.post('/{id}/messages/{message_id}/pin', response_model=MessageUserResponse | None)
 async def pin_channel_message(
     request: Request,
     id: str,
@@ -1497,7 +1501,7 @@ async def get_channel_thread_messages(
 ############################
 
 
-@router.post('/{id}/messages/{message_id}/update', response_model=Optional[MessageModel])
+@router.post('/{id}/messages/{message_id}/update', response_model=MessageModel | None)
 async def update_message_by_id(
     request: Request,
     id: str,

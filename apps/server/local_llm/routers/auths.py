@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-import datetime
+import datetime as dt
 import logging
 import re
 import time
@@ -194,7 +194,7 @@ async def create_session_response(
     )
 
     if set_cookie and response:
-        datetime_expires_at = datetime.datetime.fromtimestamp(expires_at, datetime.UTC) if expires_at else None
+        datetime_expires_at = dt.datetime.fromtimestamp(expires_at, dt.UTC) if expires_at else None
         max_age = int(expires_delta.total_seconds()) if expires_delta else None
         response.set_cookie(
             key='token',
@@ -243,7 +243,7 @@ class SessionUserResponse(Token, UserProfileImageResponse):
 class SessionUserInfoResponse(SessionUserResponse, UserStatus):
     bio: str | None = None
     gender: str | None = None
-    date_of_birth: datetime.date | None = None
+    date_of_birth: dt.date | None = None
 
 
 @router.get('/', response_model=SessionUserInfoResponse)
@@ -281,7 +281,7 @@ async def get_session_user(
         response.set_cookie(
             key='token',
             value=token,
-            expires=(datetime.datetime.fromtimestamp(expires_at, datetime.UTC) if expires_at else None),
+            expires=(dt.datetime.fromtimestamp(expires_at, dt.UTC) if expires_at else None),
             httponly=True,  # Ensures the cookie is not accessible via JavaScript
             samesite=LLLM_AUTH_COOKIE_SAME_SITE,
             secure=LLLM_AUTH_COOKIE_SECURE,
@@ -498,7 +498,6 @@ async def ldap_auth(
         raise HTTPException(400, detail=ERROR_MESSAGES.INVALID_CRED)
 
     # NOW load LDAP config variables
-    LDAP_SERVER_LABEL = await Config.get('ldap.server.label')
     LDAP_SERVER_HOST = await Config.get('ldap.server.host')
     LDAP_SERVER_PORT = await Config.get('ldap.server.port')
     LDAP_ATTRIBUTE_FOR_MAIL = await Config.get('ldap.server.attribute_for_mail')
@@ -785,7 +784,7 @@ async def signin(
                 elif trusted_role:
                     log.warning(f'Ignoring invalid trusted role header value: {trusted_role}')
 
-    elif LLLM_AUTH == False:
+    elif not LLLM_AUTH:
         auth_source = 'system'
         admin_email = 'admin@localhost'
         admin_password = 'admin'

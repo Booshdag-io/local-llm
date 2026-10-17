@@ -5,7 +5,6 @@ import logging
 import os
 import uuid
 from pathlib import Path
-from typing import Optional
 from urllib.parse import quote
 
 from fastapi import (
@@ -44,16 +43,15 @@ from local_llm.retrieval.vector.async_client import ASYNC_VECTOR_DB_CLIENT
 from local_llm.routers.audio import transcribe
 from local_llm.routers.retrieval import ProcessFileForm, process_file
 from local_llm.storage.provider import Storage
+from local_llm.utils.access_control.files import has_access_to_file
 from local_llm.utils.auth import get_admin_user, get_verified_user
+from local_llm.utils.json_codec import JSONCodec
 from local_llm.utils.misc import strict_match_mime_type
 
 log = logging.getLogger(__name__)
 
 router = APIRouter()
 
-
-from local_llm.utils.access_control.files import has_access_to_file
-from local_llm.utils.json_codec import JSONCodec
 
 ############################
 # Upload File
@@ -588,7 +586,7 @@ async def delete_all_files(
 ############################
 
 
-@router.get('/{id}', response_model=Optional[FileModel])
+@router.get('/{id}', response_model=FileModel | None)
 async def get_file_by_id(id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)):
     file = await Files.get_file_by_id(id, db=db)
 
@@ -891,7 +889,7 @@ async def get_html_file_content_by_id(
 
 
 @router.get('/{id}/content/{file_name}')
-async def get_file_content_by_id(
+async def get_file_content_by_id_and_name(
     id: str, user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
     file = await Files.get_file_by_id(id, db=db)
@@ -925,7 +923,6 @@ async def get_file_content_by_id(
         else:
             # File path doesn’t exist, return the content as .txt if possible
             file_content = file.data.get('content', '')
-            file_name = file.filename
 
             # Create a generator that encodes the file content
             def generator():

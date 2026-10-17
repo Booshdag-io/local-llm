@@ -139,7 +139,7 @@ class MessageTable:
         db: AsyncSession | None = None,
     ) -> MessageModel | None:
         async with get_async_db_context(db) as db:
-            channel_member = await Channels.join_channel(channel_id, user_id)
+            await Channels.join_channel(channel_id, user_id)
 
             id = str(uuid.uuid4())
             ts = int(time.time_ns())
@@ -436,7 +436,7 @@ class MessageTable:
         async with get_async_db_context(db) as db:
             stmt = select(func.count(Message.id)).filter(
                 Message.channel_id == channel_id,
-                Message.parent_id == None,  # only count top-level messages
+                Message.parent_id.is_(None),  # only count top-level messages
                 Message.created_at > (last_read_at if last_read_at else 0),
             )
             if user_id:

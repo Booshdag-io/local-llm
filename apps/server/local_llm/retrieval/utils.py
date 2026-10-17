@@ -3,10 +3,12 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import operator
 import os
 import re
 import time
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Sequence
+from typing import Any
 
 import aiohttp
 import requests
@@ -16,7 +18,9 @@ from langchain_classic.retrievers import (
     EnsembleRetriever,
 )
 from langchain_community.retrievers import BM25Retriever
-from langchain_core.documents import Document
+from langchain_core.callbacks import CallbackManagerForRetrieverRun, Callbacks
+from langchain_core.documents import BaseDocumentCompressor, Document
+from langchain_core.retrievers import BaseRetriever
 
 from local_llm.config import (
     RAG_EMBEDDING_CONTENT_PREFIX,
@@ -53,12 +57,6 @@ from local_llm.utils.headers import get_json_bearer_headers, include_user_info_h
 from local_llm.utils.misc import get_content_from_message, get_message_list
 
 log = logging.getLogger(__name__)
-
-
-from typing import Any
-
-from langchain_core.callbacks import CallbackManagerForRetrieverRun
-from langchain_core.retrievers import BaseRetriever
 
 
 def is_youtube_url(url: str) -> bool:
@@ -1129,16 +1127,18 @@ def get_embedding_function(
 
         return async_embedding_function
     elif embedding_engine in ['ollama', 'openai', 'azure_openai']:
-        embedding_function = lambda query, prefix=None, user=None: generate_embeddings(
-            engine=embedding_engine,
-            model=embedding_model,
-            text=query,
-            prefix=prefix,
-            url=url,
-            key=key,
-            user=user,
-            azure_api_version=azure_api_version,
-        )
+
+        def embedding_function(query, prefix=None, user=None):
+            return generate_embeddings(
+                engine=embedding_engine,
+                model=embedding_model,
+                text=query,
+                prefix=prefix,
+                url=url,
+                key=key,
+                user=user,
+                azure_api_version=azure_api_version,
+            )
 
         async def async_embedding_function(query, prefix=None, user=None):
             if isinstance(query, list):
@@ -1469,7 +1469,8 @@ async def get_sources_from_items(
             if item.get('context') == 'full' or bypass_embedding_and_retrieval:
                 if item.get('file', {}).get('data', {}).get('content', ''):
                     # Manual Full Mode Toggle
-                    # Used from chat file modal, we can assume that the file content will be available from item.get("file").get("data", {}).get("content")
+                    # Used from chat file modal, we can assume that the file content will be available from
+                    # item.get("file").get("data", {}).get("content")
                     query_result = {
                         'documents': [[item.get('file', {}).get('data', {}).get('content', '')]],
                         'metadatas': [
@@ -1718,13 +1719,6 @@ def get_model_path(model: str, update_model: bool = False):
         if OFFLINE_MODE:
             raise
         return model
-
-
-import operator
-from collections.abc import Sequence
-
-from langchain_core.callbacks import Callbacks
-from langchain_core.documents import BaseDocumentCompressor
 
 
 class RerankCompressor(BaseDocumentCompressor):

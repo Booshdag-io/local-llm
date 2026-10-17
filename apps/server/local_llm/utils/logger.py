@@ -28,10 +28,12 @@ if TYPE_CHECKING:
 
 def stdout_format(record: 'Record') -> str:
     """
-    Generates a formatted string for log records that are output to the console. This format includes a timestamp, log level, source location (module, function, and line), the log message, and any extra data (serialized as JSON).
+    Generates a formatted string for log records that are output to the console. This format includes a timestamp, log
+    level, source location (module, function, and line), the log message, and any extra data (serialized as JSON).
 
     Parameters:
-    record (Record): A Loguru record that contains logging details including time, level, name, function, line, message, and any extra context.
+    record (Record): A Loguru record that contains logging details including time, level, name, function, line, message,
+        and any extra context.
     Returns:
     str: A formatted log string intended for stdout.
     """
@@ -172,14 +174,17 @@ def start_logger():
 
     A console (stdout) handler for general log messages (excluding those marked as auditable).
     An optional file handler for audit logs if audit logging is enabled.
-    Additionally, this function reconfigures Python’s standard logging to route through Loguru and adjusts logging levels for Uvicorn.
+    Additionally, this function reconfigures Python’s standard logging to route through Loguru and adjusts logging
+    levels for Uvicorn.
 
     Parameters:
     enable_audit_logging (bool): Determines whether audit-specific log entries should be recorded to file.
     """
     logger.remove()
 
-    audit_filter = lambda record: True if ENABLE_AUDIT_STDOUT else 'auditable' not in record['extra']
+    def audit_filter(record):
+        return True if ENABLE_AUDIT_STDOUT else 'auditable' not in record['extra']
+
     if LOG_FORMAT == 'json':
         logger.add(
             _json_sink,

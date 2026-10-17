@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import datetime as dt
 import fnmatch
 import hashlib
 import logging
@@ -8,7 +9,6 @@ import sys
 import urllib
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
 from functools import partialmethod
 from types import SimpleNamespace
 from typing import Literal
@@ -72,6 +72,7 @@ from local_llm.env import (
     AIOHTTP_CLIENT_SESSION_SSL,
     ENABLE_OAUTH_EMAIL_FALLBACK,
     ENABLE_OAUTH_ID_TOKEN_COOKIE,
+    GLOBAL_LOG_LEVEL,
     LLLM_AUTH_COOKIE_SAME_SITE,
     LLLM_AUTH_COOKIE_SECURE,
     OAUTH_CLIENT_INFO_ENCRYPTION_KEY,
@@ -92,6 +93,7 @@ from local_llm.utils.auth import (
     revoke_user_tokens,
 )
 from local_llm.utils.groups import apply_default_group_assignment
+from local_llm.utils.json_codec import JSONCodec
 from local_llm.utils.misc import parse_duration
 from local_llm.utils.validate import validate_profile_image_url
 
@@ -120,9 +122,6 @@ class OAuthClientInformationFull(OAuthClientMetadata):
 
     server_metadata: OAuthMetadata | None = None  # Fetched from the OAuth server
 
-
-from local_llm.env import GLOBAL_LOG_LEVEL
-from local_llm.utils.json_codec import JSONCodec
 
 logging.basicConfig(stream=sys.stdout, level=GLOBAL_LOG_LEVEL)
 log = logging.getLogger(__name__)
@@ -216,21 +215,22 @@ def _normalize_token_expiry(token: dict) -> dict:
 
     Also stamps *issued_at* for auditing.
     """
-    token['issued_at'] = datetime.now().timestamp()
+    token['issued_at'] = dt.datetime.now().timestamp()
 
     if token.get('expires_at') is not None:
         expires_at = int(token['expires_at'])
     elif token.get('expires_in') is not None:
-        expires_at = int(datetime.now().timestamp() + token['expires_in'])
+        expires_at = int(dt.datetime.now().timestamp() + token['expires_in'])
     elif token.get('refresh_token'):
         log.warning(
             "OAuth token response missing both 'expires_in' and 'expires_at'; "
             f'defaulting to {DEFAULT_TOKEN_EXPIRY_SECONDS}s from now'
         )
-        expires_at = int(datetime.now().timestamp() + DEFAULT_TOKEN_EXPIRY_SECONDS)
+        expires_at = int(dt.datetime.now().timestamp() + DEFAULT_TOKEN_EXPIRY_SECONDS)
     else:
         log.info(
-            "OAuth token response missing 'expires_in', 'expires_at' and 'refresh_token'; treating token as non-expiring"
+            "OAuth token response missing 'expires_in', 'expires_at' and 'refresh_token'; treating token as "
+            'non-expiring'
         )
         expires_at = NON_EXPIRING_TOKEN_EXPIRES_AT
 
@@ -588,7 +588,8 @@ async def get_oauth_client_info_with_dynamic_client_registration(
                 try:
                     registration_response_json = await oauth_client_registration_response.json()
 
-                    # The mcp package requires optional unset values to be None. If an empty string is passed, it gets validated and fails.
+                    # The mcp package requires optional unset values to be None. If an empty string is passed, it gets
+                    # validated and fails.
                     # This replaces all empty strings with None.
                     registration_response_json = {
                         k: (None if v == '' else v) for k, v in registration_response_json.items()
@@ -612,7 +613,8 @@ async def get_oauth_client_info_with_dynamic_client_registration(
                     try:
                         error_text = await oauth_client_registration_response.text()
                         log.error(
-                            f'Dynamic client registration failed at {registration_url}: {oauth_client_registration_response.status} - {error_text}'
+                            f'Dynamic client registration failed at {registration_url}: '
+                            f'{oauth_client_registration_response.status} - {error_text}'
                         )
                     except Exception:
                         pass
@@ -994,7 +996,8 @@ class OAuthClientManager:
                         )
                     ):
                         log.warning(
-                            f'OAuth client preflight detected invalid registration for {client_info.client_id}: {error} {error_description}'
+                            f'OAuth client preflight detected invalid registration for {client_info.client_id}: '
+                            f'{error} {error_description}'
                         )
 
                         return False
@@ -1046,7 +1049,7 @@ class OAuthClientManager:
             if (
                 force_refresh
                 or session.expires_at is None
-                or datetime.now() + timedelta(minutes=5) >= datetime.fromtimestamp(session.expires_at)
+                or dt.datetime.now() + dt.timedelta(minutes=5) >= dt.datetime.fromtimestamp(session.expires_at)
             ):
                 log.debug('Token refresh needed for user %s, client_id %s', user_id, session.provider)
                 refreshed_token = await self._refresh_token(session)
@@ -1054,7 +1057,8 @@ class OAuthClientManager:
                     return refreshed_token
                 else:
                     log.warning(
-                        f'Token refresh failed for user {user_id}, client_id {session.provider}, deleting session {session.id}'
+                        f'Token refresh failed for user {user_id}, client_id {session.provider}, deleting session '
+                        f'{session.id}'
                     )
                     await OAuthSessions.delete_session_by_id(session.id)
                     return None
@@ -1373,7 +1377,7 @@ class OAuthManager:
             if (
                 force_refresh
                 or session.expires_at is None
-                or datetime.now() + timedelta(minutes=5) >= datetime.fromtimestamp(session.expires_at)
+                or dt.datetime.now() + dt.timedelta(minutes=5) >= dt.datetime.fromtimestamp(session.expires_at)
             ):
                 log.debug('Token refresh needed for user %s, provider %s', user_id, session.provider)
                 refreshed_token = await self._refresh_token(session)
@@ -1381,7 +1385,8 @@ class OAuthManager:
                     return refreshed_token
                 else:
                     log.warning(
-                        f'Token refresh failed for user {user_id}, provider {session.provider}, deleting session {session.id}'
+                        f'Token refresh failed for user {user_id}, provider {session.provider}, deleting session '
+                        f'{session.id}'
                     )
                     await OAuthSessions.delete_session_by_id(session.id)
 
@@ -1796,7 +1801,8 @@ class OAuthManager:
                 get_kwargs['headers'] = {
                     'Authorization': f'Bearer {access_token}',
                 }
-            # get_ssrf_safe_session pins the connect-time IP (defeats DNS rebinding); allow_redirects=False keeps validate_url's vet authoritative.
+            # get_ssrf_safe_session pins the connect-time IP (defeats DNS rebinding); allow_redirects=False keeps
+            # validate_url's vet authoritative.
             async with get_ssrf_safe_session() as session:
                 async with session.get(
                     picture_url,
@@ -1939,7 +1945,8 @@ class OAuthManager:
             email = user_data.get(email_claim, '')
             # We currently mandate that email addresses are provided
             if not email:
-                # If the provider is GitHub,and public email is not provided, we can use the access token to fetch the user's email
+                # If the provider is GitHub,and public email is not provided, we can use the access token to fetch the
+                # user's email
                 if provider == 'github':
                     try:
                         access_token = token.get('access_token')
@@ -2030,7 +2037,8 @@ class OAuthManager:
                             existing_user = await Users.get_user_by_email(new_email, db=db)
                             if existing_user:
                                 log.error(
-                                    f'Cannot update email to {new_email} for user {user.id} because it is already taken.'
+                                    f'Cannot update email to {new_email} for user {user.id} because it is already '
+                                    'taken.'
                                 )
                             elif await Auths.update_email_by_id(user.id, new_email.lower(), db=db):
                                 user = await Users.get_user_by_id(user.id, db=db) or user

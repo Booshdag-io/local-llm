@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import errno
-from enum import Enum
+from enum import StrEnum
 
 _ERRNO_MESSAGES = {
     errno.ENAMETOOLONG: 'File name is too long.',
@@ -23,27 +23,44 @@ def _error_message(err='', fallback='') -> str:
     return f'[ERROR: {err}]'
 
 
-class MESSAGES(str, Enum):
-    DEFAULT = lambda msg='': f'{msg if msg else ""}'
-    MODEL_ADDED = lambda model='': f"The model '{model}' has been added successfully."
-    MODEL_DELETED = lambda model='': f"The model '{model}' has been deleted successfully."
+class MESSAGES(StrEnum):
+    def DEFAULT(msg=''):
+        return f'{msg if msg else ""}'
+
+    def MODEL_ADDED(model=''):
+        return f"The model '{model}' has been added successfully."
+
+    def MODEL_DELETED(model=''):
+        return f"The model '{model}' has been deleted successfully."
 
 
-class WEBHOOK_MESSAGES(str, Enum):
-    DEFAULT = lambda msg='': f'{msg if msg else ""}'
-    USER_SIGNUP = lambda username='': f'New user signed up: {username}' if username else 'New user signed up'
+class WEBHOOK_MESSAGES(StrEnum):
+    def DEFAULT(msg=''):
+        return f'{msg if msg else ""}'
+
+    def USER_SIGNUP(username=''):
+        return f'New user signed up: {username}' if username else 'New user signed up'
 
 
-class ERROR_MESSAGES(str, Enum):
-    def __str__(self) -> str:
-        return super().__str__()
-
+class ERROR_MESSAGES(StrEnum):
     DEFAULT = _error_message
     ENV_VAR_NOT_FOUND = 'Required environment variable not found. Terminating now.'
-    CREATE_USER_ERROR = 'Oops! Something went wrong while creating your account. Please try again later. If the issue persists, contact support for assistance.'
-    DELETE_USER_ERROR = 'Oops! Something went wrong. We encountered an issue while trying to delete the user. Please give it another shot.'
-    EMAIL_MISMATCH = 'Uh-oh! This email does not match the email your provider is registered with. Please check your email and try again.'
-    EMAIL_TAKEN = 'Uh-oh! This email is already registered. Sign in with your existing account or choose another email to start anew.'
+    CREATE_USER_ERROR = (
+        'Oops! Something went wrong while creating your account. Please try again later. If the issue persists, '
+        'contact support for assistance.'
+    )
+    DELETE_USER_ERROR = (
+        'Oops! Something went wrong. We encountered an issue while trying to delete the user. Please give it another '
+        'shot.'
+    )
+    EMAIL_MISMATCH = (
+        'Uh-oh! This email does not match the email your provider is registered with. Please check your email and '
+        'try again.'
+    )
+    EMAIL_TAKEN = (
+        'Uh-oh! This email is already registered. Sign in with your existing account or choose another email to '
+        'start anew.'
+    )
     USERNAME_TAKEN = 'Uh-oh! This username is already registered. Please choose another username.'
     PASSWORD_TOO_LONG = (
         'Uh-oh! The password you entered is too long. Please make sure your password is less than 72 bytes long.'
@@ -58,13 +75,19 @@ class ERROR_MESSAGES(str, Enum):
 
     INVALID_TOKEN = 'Your session has expired or the token is invalid. Please sign in again.'
     INVALID_CRED = 'The email or password provided is incorrect. Please check for typos and try logging in again.'
-    INVALID_EMAIL_FORMAT = "The email format you entered is invalid. Please double-check and make sure you're using a valid email address (e.g., yourname@example.com)."
+    INVALID_EMAIL_FORMAT = (
+        "The email format you entered is invalid. Please double-check and make sure you're using a valid email "
+        'address (e.g., yourname@example.com).'
+    )
     INCORRECT_PASSWORD = 'The password provided is incorrect. Please check for typos and try again.'
     INVALID_TRUSTED_HEADER = (
         'Your provider has not provided a trusted header. Please contact your administrator for assistance.'
     )
 
-    EXISTING_USERS = "You can't turn off authentication because there are existing users. If you want to disable LLLM_AUTH, make sure your web interface doesn't have any existing users and is a fresh installation."
+    EXISTING_USERS = (
+        "You can't turn off authentication because there are existing users. If you want to disable LLLM_AUTH, make "
+        "sure your web interface doesn't have any existing users and is a fresh installation."
+    )
 
     UNAUTHORIZED = '401 Unauthorized'
     ACCESS_PROHIBITED = (
@@ -73,23 +96,39 @@ class ERROR_MESSAGES(str, Enum):
     ACTION_PROHIBITED = 'The requested action has been restricted as a security measure.'
 
     FILE_NOT_SENT = 'FILE_NOT_SENT'
-    FILE_NOT_SUPPORTED = "Oops! It seems like the file format you're trying to upload is not supported. Please upload a file with a supported format and try again."
+    FILE_NOT_SUPPORTED = (
+        "Oops! It seems like the file format you're trying to upload is not supported. Please upload a file with a "
+        'supported format and try again.'
+    )
 
     NOT_FOUND = "We could not find what you're looking for :/"
     USER_NOT_FOUND = "We could not find what you're looking for :/"
-    API_KEY_NOT_FOUND = "Oops! It looks like there's a hiccup. The API key is missing. Please make sure to provide a valid API key to access this feature."
+    API_KEY_NOT_FOUND = (
+        "Oops! It looks like there's a hiccup. The API key is missing. Please make sure to provide a valid API key "
+        'to access this feature.'
+    )
     API_KEY_NOT_ALLOWED = 'Use of API key is not enabled in the environment.'
 
     MALICIOUS = 'Unusual activities detected, please try again in a few minutes.'
 
     PANDOC_NOT_INSTALLED = 'Pandoc is not installed on the server. Please contact your administrator for assistance.'
-    INCORRECT_FORMAT = lambda err='': f'Invalid format. Please use the correct format{err}'
+
+    def INCORRECT_FORMAT(err=''):
+        return f'Invalid format. Please use the correct format{err}'
+
     RATE_LIMIT_EXCEEDED = 'API rate limit exceeded'
 
-    MODEL_NOT_FOUND = lambda name='': f"Model '{name}' was not found"
-    OPENAI_NOT_FOUND = lambda name='': 'OpenAI API was not found'
+    def MODEL_NOT_FOUND(name=''):
+        return f"Model '{name}' was not found"
+
+    def OPENAI_NOT_FOUND(name=''):
+        return 'OpenAI API was not found'
+
     OLLAMA_NOT_FOUND = 'WebUI could not connect to Ollama'
-    CREATE_API_KEY_ERROR = 'Oops! Something went wrong while creating your API key. Please try again later. If the issue persists, contact support for assistance.'
+    CREATE_API_KEY_ERROR = (
+        'Oops! Something went wrong while creating your API key. Please try again later. If the issue persists, '
+        'contact support for assistance.'
+    )
     API_KEY_CREATION_NOT_ALLOWED = 'API key creation is not allowed in the environment.'
 
     EMPTY_CONTENT = 'The content provided is empty. Please ensure that there is text or data present before proceeding.'
@@ -102,38 +141,51 @@ class ERROR_MESSAGES(str, Enum):
 
     OLLAMA_API_DISABLED = 'The Ollama API is disabled. Please enable it to use this feature.'
 
-    FILE_TOO_LARGE = lambda size='': (
-        f"Oops! The file you're trying to upload is too large. Please upload a file that is less than {size}."
-    )
+    def FILE_TOO_LARGE(size=''):
+        return f"Oops! The file you're trying to upload is too large. Please upload a file that is less than {size}."
 
     DUPLICATE_CONTENT = 'Duplicate content detected. Please provide unique content to proceed.'
     FILE_NOT_PROCESSED = (
         'Extracted content is not available for this file. Please ensure that the file is processed before proceeding.'
     )
 
-    INVALID_PASSWORD = lambda err='': err if err else 'The password does not meet the required validation criteria.'
+    def INVALID_PASSWORD(err=''):
+        return err if err else 'The password does not meet the required validation criteria.'
 
-    AUTOMATION_LIMIT_EXCEEDED = lambda size='': f'Automation limit reached ({size})'
-    AUTOMATION_TOO_FREQUENT = lambda interval='': f'Schedule too frequent. Minimum interval is {interval} seconds.'
-    AUTOMATION_INVALID_RRULE = lambda err='': f'Invalid RRULE: {err}'
+    def AUTOMATION_LIMIT_EXCEEDED(size=''):
+        return f'Automation limit reached ({size})'
+
+    def AUTOMATION_TOO_FREQUENT(interval=''):
+        return f'Schedule too frequent. Minimum interval is {interval} seconds.'
+
+    def AUTOMATION_INVALID_RRULE(err=''):
+        return f'Invalid RRULE: {err}'
+
     AUTOMATION_NO_FUTURE_RUNS = 'RRULE has no future occurrences'
     AUTOMATION_COUNT_REQUIRES_DTSTART = (
         'RRULE with COUNT requires an explicit DTSTART line to anchor the occurrence window'
     )
     CALENDAR_RRULE_TOO_FREQUENT = 'Recurring events cannot repeat more often than daily'
 
-    FEATURE_DISABLED = lambda name='': f'{name} is disabled'
-    INPUT_TOO_LONG = lambda size='': f'Input prompt exceeds maximum length of {size}'
+    def FEATURE_DISABLED(name=''):
+        return f'{name} is disabled'
+
+    def INPUT_TOO_LONG(size=''):
+        return f'Input prompt exceeds maximum length of {size}'
+
     SERVER_CONNECTION_ERROR = 'Local LLM: Server Connection Error'
-    REQUIRED_FIELD_EMPTY = lambda name='': f'Required field {name} is empty'
-    OAUTH_NOT_CONFIGURED = lambda name='': f"Provider '{name}' is not configured"
+
+    def REQUIRED_FIELD_EMPTY(name=''):
+        return f'Required field {name} is empty'
+
+    def OAUTH_NOT_CONFIGURED(name=''):
+        return f"Provider '{name}' is not configured"
 
 
-class TASKS(str, Enum):
-    def __str__(self) -> str:
-        return super().__str__()
+class TASKS(StrEnum):
+    def DEFAULT(task=''):
+        return f'{task if task else "generation"}'
 
-    DEFAULT = lambda task='': f'{task if task else "generation"}'
     TITLE_GENERATION = 'title_generation'
     FOLLOW_UP_GENERATION = 'follow_up_generation'
     TAGS_GENERATION = 'tags_generation'
