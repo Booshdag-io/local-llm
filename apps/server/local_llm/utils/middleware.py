@@ -1029,7 +1029,9 @@ async def _mcp_list_result(request, tool_result: list, metadata, user, tool_resu
     return tool_response[0] if len(tool_response) == 1 else tool_response
 
 
-def _move_openapi_data_items(tool_result: list, tool_result_files: list) -> None:
+def _split_openapi_data_items(tool_result: list, tool_result_files: list) -> list:
+    """The result without its data: items, which become files; the tool's own list is left as it was."""
+    kept = []
     for item in tool_result:
         if isinstance(item, str) and item.startswith('data:'):
             tool_result_files.append(
@@ -1038,7 +1040,9 @@ def _move_openapi_data_items(tool_result: list, tool_result_files: list) -> None
                     'content': item,
                 }
             )
-            tool_result.remove(item)
+        else:
+            kept.append(item)
+    return kept
 
 
 def _tool_result_text(tool_result):
@@ -1101,7 +1105,7 @@ async def process_tool_result(
         if tool_type == 'mcp':
             tool_result = await _mcp_list_result(request, tool_result, metadata, user, tool_result_files)
         else:  # OpenAPI
-            _move_openapi_data_items(tool_result, tool_result_files)
+            tool_result = _split_openapi_data_items(tool_result, tool_result_files)
 
     return _tool_result_text(tool_result), tool_result_files, tool_result_embeds
 
@@ -3593,7 +3597,8 @@ def _messages_for_tasks(message_list: list[dict]) -> list[dict]:
 def _task_reply_json(res: dict, text_from_message) -> str:
     """The {...} span of a task model's reply, from its single choice's message text."""
     if len(res.get('choices', [])) == 1:
-        text = text_from_message(res.get('choices', [])[0].get('message', {}))
+        # A reply may carry content and reasoning_content as null; read that as no text.
+        text = text_from_message(res.get('choices', [])[0].get('message', {})) or ''
     else:
         text = ''
     return text[text.find('{') : text.rfind('}') + 1]
@@ -3687,7 +3692,7 @@ async def _generate_chat_title(
         title = messages[0].get('content', user_message)
 
         await Chats.update_chat_title_by_id(metadata['chat_id'], title)
-        await event_emitter({'type': 'chat:title', 'data': message.get('content', user_message)})
+        await event_emitter({'type': 'chat:title', 'data': title})
 
 
 async def _generate_chat_tags(request, user, metadata: dict, event_emitter, model_id: str, messages: list[dict]):
