@@ -260,5 +260,4 @@ pydocstyle.convention = "google"
 "local_llm/main.py" = ["C901"]
 "local_llm/tools/builtin.py" = ["C901"]
 "local_llm/utils/middleware.py" = ["C901"]
-"local_llm/utils/oauth.py" = ["C901"]
 "local_llm/utils/tools.py" = ["C901"]
