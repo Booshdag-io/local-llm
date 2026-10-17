@@ -78,6 +78,18 @@ _UNSUPPORTED_OPENAI_MODEL_KEYWORDS = ('babbage', 'dall-e', 'davinci', 'embedding
 BASE_MODELS_CACHE_KEY = f'{REDIS_KEY_PREFIX}:models:base'
 
 
+def _upstream_error_status(r) -> int:
+    """The status for an error raised while talking to an upstream provider.
+
+    The upstream's own error status when it sent one; 502 when it answered
+    with a success status but the answer couldn't be used (an error must
+    never go out as a 200); 500 when there was no answer at all.
+    """
+    if r is None:
+        return 500
+    return r.status if r.status >= 400 else 502
+
+
 def _clean_proxy_headers(raw_headers) -> dict:
     """Return a copy of *raw_headers* with stale encoding headers removed."""
     return {k: v for k, v in raw_headers.items() if k not in _STRIP_PROXY_HEADERS}
@@ -651,7 +663,7 @@ async def speech(request: Request, user=Depends(get_verified_user)):
                     detail = f'External: {e}'
 
             raise HTTPException(
-                status_code=r.status if r else 500,
+                status_code=_upstream_error_status(r),
                 detail=detail if detail else 'Local LLM: Server Connection Error',
             )
 
@@ -1495,7 +1507,15 @@ def _adapt_payload_for_provider(payload: dict, model: dict, url: str, user) -> d
         del payload['max_tokens']
 
     if 'logit_bias' in payload and payload['logit_bias']:
-        logit_bias = convert_logit_bias_input_to_json(payload['logit_bias'])
+        try:
+            logit_bias = convert_logit_bias_input_to_json(payload['logit_bias'])
+        except (ValueError, AttributeError) as e:
+            # A request's own malformed logit_bias is the client's error, not a server one.
+            raise HTTPException(
+                status_code=400,
+                detail='Invalid logit_bias: expected an object of token ids to biases, '
+                'or "token:bias" pairs separated by commas.',
+            ) from e
         if logit_bias:
             payload['logit_bias'] = JSONCodec.loads(logit_bias)
     return payload
@@ -1658,7 +1678,7 @@ async def generate_chat_completion(
     except Exception as e:
         log.exception(e)
         raise HTTPException(
-            status_code=r.status if r else 500,
+            status_code=_upstream_error_status(r),
             detail=ERROR_MESSAGES.SERVER_CONNECTION_ERROR,
         )
     finally:
@@ -1764,7 +1784,7 @@ async def embeddings(request: Request, form_data: dict, user):
     except Exception as e:
         log.exception(e)
         raise HTTPException(
-            status_code=r.status if r else 500,
+            status_code=_upstream_error_status(r),
             detail=ERROR_MESSAGES.SERVER_CONNECTION_ERROR,
         )
     finally:
@@ -1895,7 +1915,7 @@ async def responses(
     except Exception as e:
         log.exception(e)
         raise HTTPException(
-            status_code=r.status if r else 500,
+            status_code=_upstream_error_status(r),
             detail=ERROR_MESSAGES.SERVER_CONNECTION_ERROR,
         )
     finally:
@@ -2017,7 +2037,7 @@ async def proxy(path: str, request: Request, user=Depends(get_verified_user)):
     except Exception as e:
         log.exception(e)
         raise HTTPException(
-            status_code=r.status if r else 500,
+            status_code=_upstream_error_status(r),
             detail='Local LLM: Server Connection Error',
         )
     finally:
