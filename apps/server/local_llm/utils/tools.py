@@ -358,8 +358,9 @@ async def _local_tool_entries(request: Request, tool_id: str, tool, user: UserMo
     return entries
 
 
-def _parse_server_tool_id(tool_id: str) -> tuple[str, str]:
-    """A tool id's server type and id: server:<id> is OpenAPI, server:<type>:<id> names its type."""
+def _parse_server_tool_id(tool_id: str) -> tuple[str, str] | None:
+    """A tool id's server type and id: server:<id> is OpenAPI, server:<type>:<id> names its type.
+    None for any other shape."""
     splits = tool_id.split(':')
     if len(splits) == 2:
         server_type = 'openapi'
@@ -367,6 +368,8 @@ def _parse_server_tool_id(tool_id: str) -> tuple[str, str]:
     elif len(splits) == 3:
         server_type = splits[1]
         server_id = splits[2]
+    else:
+        return None
 
     server_id_splits = server_id.split('|')
     if len(server_id_splits) == 2:
@@ -493,7 +496,11 @@ async def get_tools(request: Request, tool_ids: list[str], user: UserModel, extr
             prefix = tool_id
             entries = await _local_tool_entries(request, tool_id, tool, user, extra_params)
         elif tool_id.startswith('server:'):
-            server_type, server_id = _parse_server_tool_id(tool_id)
+            parsed = _parse_server_tool_id(tool_id)
+            if parsed is None:
+                log.warning(f'Skipping malformed tool server id {tool_id}')
+                continue
+            server_type, server_id = parsed
             if server_type != 'openapi':
                 continue
             prefix = server_id
@@ -1721,7 +1728,8 @@ def _operation_url(url: str, route_path: str, path_params: dict, query_params: d
     for key, value in path_params.items():
         final_url = final_url.replace(f'{{{key}}}', quote(str(value), safe=''))
     if query_params:
-        final_url = f'{final_url}?{urlencode(query_params)}'
+        # A list goes as one key per value (OpenAPI's default form style, exploded).
+        final_url = f'{final_url}?{urlencode(query_params, doseq=True)}'
     return final_url
 
 
@@ -1754,13 +1762,16 @@ async def execute_tool_server(
             raise Exception(f'No matching route found for operationId: {name}')
         route_path, methods, http_method, operation = matching_operation
 
-        path_params, query_params = _route_params(_operation_parameters(methods, operation), params)
+        parameters = _operation_parameters(methods, operation)
+        path_params, query_params = _route_params(parameters, params)
         final_url = _operation_url(url, route_path, path_params, query_params)
 
         body_params = {}
         if operation.get('requestBody', {}).get('content'):
-            if params:
-                body_params = params
+            # The tool's arguments flatten the body's fields together with the operation's
+            # parameters; those go in the path, query, header or cookie, not in the body too.
+            parameter_names = {param['name'] for param in parameters}
+            body_params = {key: value for key, value in params.items() if key not in parameter_names}
 
         # Methods that may carry a body always send one, empty when the operation takes none.
         body = {'json': body_params} if http_method in ['post', 'put', 'patch', 'delete'] else {}
