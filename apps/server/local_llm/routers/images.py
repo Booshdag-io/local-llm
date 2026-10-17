@@ -859,13 +859,12 @@ async def edit_images(request: Request, form_data: EditImageForm, user=Depends(g
 
 
 def _edit_size(image_config, form_data: EditImageForm) -> tuple[str | None, int | None, int | None]:
-    if (image_config.IMAGE_EDIT_SIZE and 'x' in image_config.IMAGE_EDIT_SIZE) or (
-        form_data.size and 'x' in form_data.size
-    ):
-        size = form_data.size if form_data.size else image_config.IMAGE_EDIT_SIZE
-        width, height = tuple(map(int, size.split('x')))
-        return size, width, height
-    return None, None, None
+    # The requested size wins when it is WidthxHeight; otherwise the configured one, if it is.
+    size = next((s for s in (form_data.size, image_config.IMAGE_EDIT_SIZE) if s and 'x' in s), None)
+    if size is None:
+        return None, None, None
+    width, height = tuple(map(int, size.split('x')))
+    return size, width, height
 
 
 def _is_own_file_url(parsed, request: Request) -> bool:
@@ -970,7 +969,7 @@ async def _edit_openai(request, image_config, form_data, model, size, metadata, 
         **({'n': form_data.n} if form_data.n else {}),
         **({'size': size} if size else {}),
         **({'background': form_data.background} if form_data.background else {}),
-        **_response_format(image_config.IMAGE_EDIT_MODEL),
+        **_response_format(model),
     }
     form = _multipart_form(data, _openai_edit_files(form_data.image))
 
@@ -984,19 +983,26 @@ async def _edit_openai(request, image_config, form_data, model, size, metadata, 
     return await _store_openai_images(request, res, headers, {**data, **metadata}, user)
 
 
+def _gemini_inline_image(data_url: str) -> dict:
+    header, encoded = data_url.split(',', 1)
+    mime_type = header.split(';')[0].removeprefix('data:') or 'image/png'
+    return {'inline_data': {'mime_type': mime_type, 'data': encoded}}
+
+
 async def _edit_gemini(request, image_config, form_data, model, size, metadata, user) -> list[dict]:
     headers = {
         'Content-Type': 'application/json',
         'x-goog-api-key': image_config.IMAGES_EDIT_GEMINI_API_KEY,
     }
     images = [form_data.image] if isinstance(form_data.image, str) else form_data.image
-    image_parts = [{'inline_data': {'mime_type': 'image/png', 'data': image.split(',', 1)[1]}} for image in images]
-    data = {'contents': [{'parts': [{'text': form_data.prompt}, *image_parts]}]}
+    data = {'contents': [{'parts': [{'text': form_data.prompt}, *map(_gemini_inline_image, images)]}]}
 
     res = await _post_engine_json(
         f'{image_config.IMAGES_EDIT_GEMINI_API_BASE_URL}/models/{model}:generateContent', headers, json=data
     )
-    return await _store_gemini_parts(request, res, {**data, **metadata}, user)
+    # The result files record the prompt, not a copy of every input image.
+    request_metadata = {'contents': [{'parts': [{'text': form_data.prompt}]}]}
+    return await _store_gemini_parts(request, res, {**request_metadata, **metadata}, user)
 
 
 async def _upload_to_comfyui(image_config, image: str | list[str]) -> list[str]:
@@ -1018,7 +1024,8 @@ async def _upload_to_comfyui(image_config, image: str | list[str]) -> list[str]:
 
 
 def _comfyui_result_urls(res: dict) -> list[str]:
-    image_urls = list({image['url'] for image in res['data']})
+    # Duplicates dropped, first appearance kept, so results come back in ComfyUI's order.
+    image_urls = list(dict.fromkeys(image['url'] for image in res['data']))
     # Prioritize output type URLs if available
     output_type_urls = [url for url in image_urls if 'type=output' in url]
     return output_type_urls or image_urls
