@@ -2457,40 +2457,6 @@
     }
    ],
    [
-    "emit",
-    {
-     "type": "response:completion",
-     "data": {
-      "selected_model_id": "m2"
-     }
-    }
-   ],
-   [
-    "save_response_stream",
-    [
-     "<redis>",
-     "a1",
-     "7f1c0d9e-3b5a-4c1e-9a2f-0b8d6e4c2a10",
-     "a1",
-     "a",
-     [
-      {
-       "type": "message",
-       "id": "msg_000000000000000000000001",
-       "status": "in_progress",
-       "role": "assistant",
-       "content": [
-        {
-         "type": "output_text",
-         "text": "a"
-        }
-       ]
-      }
-     ]
-    ],
-    {}
-   ],
-   [
     "chats.get_chat_title",
     [
      "7f1c0d9e-3b5a-4c1e-9a2f-0b8d6e4c2a10"
@@ -2749,15 +2715,6 @@
         "delta": {}
        }
       ]
-     }
-    }
-   ],
-   [
-    "emit",
-    {
-     "type": "chat:completion",
-     "data": {
-      "selected_model_id": "m2"
      }
     }
    ],
@@ -9433,14 +9390,27 @@
      "content": [
       {
        "type": "output_text",
-       "text": "The solution<|end_of_solution|> tail"
+       "text": "The solution"
       }
      ],
      "_tag_type": "solution",
      "start_tag": "<|begin_of_solution|>",
      "end_tag": "<|end_of_solution|>",
      "attributes": {},
-     "started_at": 1000.0
+     "started_at": 1000.0,
+     "ended_at": 1003.0
+    },
+    {
+     "type": "message",
+     "id": "msg_000000000000000000000003",
+     "status": "completed",
+     "role": "assistant",
+     "content": [
+      {
+       "type": "output_text",
+       "text": "tail"
+      }
+     ]
     }
    ]
   },
@@ -9473,8 +9443,8 @@
      "type": "response:completion",
      "data": {
       "type": "response.output_text.delta",
-      "item_id": "msg_000000000000000000000002",
-      "output_index": 0,
+      "item_id": "msg_000000000000000000000003",
+      "output_index": 1,
       "content_index": 0,
       "delta": "<|begin_of_solution|>The solution<|end_of_solution|> tail"
      }
@@ -9509,14 +9479,27 @@
        "content": [
         {
          "type": "output_text",
-         "text": "The solution<|end_of_solution|> tail"
+         "text": "The solution"
         }
        ],
        "_tag_type": "solution",
        "start_tag": "<|begin_of_solution|>",
        "end_tag": "<|end_of_solution|>",
        "attributes": {},
-       "started_at": 1000.0
+       "started_at": 1000.0,
+       "ended_at": 1003.0
+      },
+      {
+       "type": "message",
+       "id": "msg_000000000000000000000003",
+       "status": "completed",
+       "role": "assistant",
+       "content": [
+        {
+         "type": "output_text",
+         "text": "tail"
+        }
+       ]
       }
      ]
     ],
@@ -9537,14 +9520,27 @@
         "content": [
          {
           "type": "output_text",
-          "text": "The solution<|end_of_solution|> tail"
+          "text": "The solution"
          }
         ],
         "_tag_type": "solution",
         "start_tag": "<|begin_of_solution|>",
         "end_tag": "<|end_of_solution|>",
         "attributes": {},
-        "started_at": 1000.0
+        "started_at": 1000.0,
+        "ended_at": 1003.0
+       },
+       {
+        "type": "message",
+        "id": "msg_000000000000000000000003",
+        "status": "completed",
+        "role": "assistant",
+        "content": [
+         {
+          "type": "output_text",
+          "text": "tail"
+         }
+        ]
        }
       ],
       "title": ""
@@ -9592,14 +9588,27 @@
          "content": [
           {
            "type": "output_text",
-           "text": "The solution<|end_of_solution|> tail"
+           "text": "The solution"
           }
          ],
          "_tag_type": "solution",
          "start_tag": "<|begin_of_solution|>",
          "end_tag": "<|end_of_solution|>",
          "attributes": {},
-         "started_at": 1000.0
+         "started_at": 1000.0,
+         "ended_at": 1003.0
+        },
+        {
+         "type": "message",
+         "id": "msg_000000000000000000000003",
+         "status": "completed",
+         "role": "assistant",
+         "content": [
+          {
+           "type": "output_text",
+           "text": "tail"
+          }
+         ]
         }
        ]
       }
@@ -9648,14 +9657,27 @@
          "content": [
           {
            "type": "output_text",
-           "text": "The solution<|end_of_solution|> tail"
+           "text": "The solution"
           }
          ],
          "_tag_type": "solution",
          "start_tag": "<|begin_of_solution|>",
          "end_tag": "<|end_of_solution|>",
          "attributes": {},
-         "started_at": 1000.0
+         "started_at": 1000.0,
+         "ended_at": 1003.0
+        },
+        {
+         "type": "message",
+         "id": "msg_000000000000000000000003",
+         "status": "completed",
+         "role": "assistant",
+         "content": [
+          {
+           "type": "output_text",
+           "text": "tail"
+          }
+         ]
         }
        ]
       }

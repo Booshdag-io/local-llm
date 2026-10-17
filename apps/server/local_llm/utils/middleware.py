@@ -4264,9 +4264,6 @@ async def non_streaming_chat_response_handler(response, ctx):
     return response
 
 
-_NO_DELTA = object()
-
-
 def _message_output_item(text: str = '', **extra) -> dict:
     return {
         'type': 'message',
@@ -4418,14 +4415,16 @@ class _TagScanner:
 
         Returns the output and whether a block was closed."""
         last_type = output[-1].get('type', '') if output else ''
-        if last_type == 'message':
-            return self._open_block(content_type, tags, output)
+        # An open block of this kind is checked for its end tag first: a tagged message
+        # (a solution block) is a message too, and would otherwise only be scanned for start tags.
         if (
             (last_type == 'reasoning' and content_type == 'reasoning')
             or (last_type == 'open_webui:code_interpreter' and content_type == 'code_interpreter')
             or (last_type == 'message' and output[-1].get('_tag_type') == content_type)
         ):
             return output, self._close_block(content_type, output, last_type)
+        if last_type == 'message':
+            return self._open_block(content_type, tags, output)
         return output, False
 
     def _open_block(self, content_type: str, tags: list, output: list) -> tuple[list, bool]:
@@ -4926,7 +4925,6 @@ class _StreamingReply:
 
         if 'selected_model_id' in data:
             await self._handle_selected_model(data)
-            await self._resend_after_previous_delta(stream, data)
             return False
         # Check for Responses API events (type field starts with "response.")
         if data.get('type', '').startswith('response.'):
@@ -4950,21 +4948,6 @@ class _StreamingReply:
                 'data': data,
             }
         )
-
-    async def _resend_after_previous_delta(self, stream: '_StreamPass', data: dict) -> None:
-        # The chunk is sent again the way the previous chat chunk's delta was: queued as a delta,
-        # or as a chat:completion event. With no previous chat chunk, nothing more is sent.
-        if stream.last_delta is _NO_DELTA:
-            return
-        if stream.last_delta and data:
-            await self._queue_delta(stream, data, stream.last_delta_type)
-        elif data:
-            await self.event_emitter(
-                {
-                    'type': 'chat:completion',
-                    'data': data,
-                }
-            )
 
     async def _handle_responses_event(self, stream: '_StreamPass', data: dict) -> None:
         response_data_type = data.get('type', '')
@@ -5061,7 +5044,6 @@ class _StreamingReply:
             return False
 
         delta = choices[0].get('delta', {})
-        stream.last_delta, stream.last_delta_type = delta, 'content'
         await self._emit_delta_citations(delta.get('annotations'))
 
         event_data, delta_type = data, 'content'
@@ -5078,13 +5060,11 @@ class _StreamingReply:
         value = delta.get('content')
         if value and not isinstance(value, str):
             value = f'{value}'
-        stream.last_delta_type = delta_type
         if value:
             content_event = await self._handle_content(value)
             if content_event is None:
                 return True
             event_data, delta_type = content_event
-            stream.last_delta_type = delta_type
 
         if delta and event_data:
             await self._queue_delta(stream, event_data, delta_type)
@@ -5954,9 +5934,6 @@ class _StreamPass:
 
     def __init__(self, reply: _StreamingReply, form_data: dict):
         self.response_tool_calls = []
-        # The last chat chunk's delta and delta type
-        self.last_delta = _NO_DELTA
-        self.last_delta_type = None
         self.deltas = _DeltaBuffer(
             reply.event_emitter,
             reply.save_stream,
