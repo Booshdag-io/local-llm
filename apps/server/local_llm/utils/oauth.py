@@ -1380,7 +1380,8 @@ async def _callback_user_data(client, token: dict, provider: str, auth_config) -
     if provider == 'feishu' and isinstance(user_data, dict) and 'data' in user_data:
         user_data = user_data['data']
     if not user_data:
-        log.warning(f'OAuth callback failed, user data is missing: {token}')
+        # Name the token response's fields, never their values: they include the access and refresh tokens.
+        log.warning('OAuth callback failed, user data is missing (token response fields: %s)', sorted(token))
         raise HTTPException(400, detail=ERROR_MESSAGES.INVALID_CRED)
     return user_data
 
@@ -2349,8 +2350,9 @@ class OAuthManager:
             data={'auth_method': 'oauth', 'provider': provider},
         )
 
-        # Legacy cookies for compatibility with older frontend versions
-        if ENABLE_OAUTH_ID_TOKEN_COOKIE:
+        # Legacy cookies for compatibility with older frontend versions; a plain
+        # OAuth 2 provider (GitHub, Feishu) issues no ID token to put in one.
+        if ENABLE_OAUTH_ID_TOKEN_COOKIE and token.get('id_token'):
             _set_auth_cookie(response, 'oauth_id_token', token.get('id_token'), httponly=True, max_age=cookie_max_age)
 
         await _store_oauth_session(response, user, provider, token, cookie_max_age, db=db)
