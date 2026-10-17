@@ -543,6 +543,9 @@ def _parse_openai_sse_chunk(chunk):
     """The JSON objects in one chunk of an OpenAI SSE stream, skipping keep-alives, [DONE] and bad lines."""
     if isinstance(chunk, bytes):
         chunk = chunk.decode('utf-8', errors='ignore')
+    if not isinstance(chunk, str):
+        log.warning('Skipping a non-text chunk in the Anthropic stream conversion: %r', type(chunk))
+        return
     for line in chunk.strip().split('\n'):
         line = line.strip()
         if not line or not line.startswith('data:'):
@@ -774,7 +777,9 @@ class _AnthropicStreamConverter:
         if tool_call_name and not tool['name']:
             tool['name'] = tool_call_name
 
-        # A tool's block starts as soon as it has a name.
+        # A tool's block starts as soon as it has a name. Arguments that
+        # arrived before the name were buffered; they go out first, so the
+        # client's input_json_delta pieces add up to the whole arguments.
         if not tool['started'] and tool['name']:
             tool['block_index'] = self.current_block_index
             tool['started'] = True
@@ -787,18 +792,25 @@ class _AnthropicStreamConverter:
                 }
             )
             self.current_block_index += 1
+            if tool['arguments']:
+                yield self._input_json_delta(tool, tool['arguments'])
+                yield from self._close_tool_if_complete(tool)
 
         if arguments_chunk:
             tool['arguments'] += arguments_chunk
             if tool['started'] and not tool['stopped']:
-                yield _sse(
-                    {
-                        'type': 'content_block_delta',
-                        'index': tool['block_index'],
-                        'delta': {'type': 'input_json_delta', 'partial_json': arguments_chunk},
-                    }
-                )
+                yield self._input_json_delta(tool, arguments_chunk)
             yield from self._close_tool_if_complete(tool)
+
+    @staticmethod
+    def _input_json_delta(tool: dict, partial_json: str) -> bytes:
+        return _sse(
+            {
+                'type': 'content_block_delta',
+                'index': tool['block_index'],
+                'delta': {'type': 'input_json_delta', 'partial_json': partial_json},
+            }
+        )
 
     def _close_tool_if_complete(self, tool: dict):
         """Closes a tool's block once its buffered arguments parse as complete JSON."""
@@ -855,11 +867,16 @@ async def openai_stream_to_anthropic_stream(openai_stream_generator, model: str 
 
     Handles text, thinking, tool calls, and mixed content with proper
     multi-block indexing as required by Anthropic's streaming protocol (see
-    _AnthropicStreamConverter). An error anywhere in the source stream or in a
-    chunk ends the conversion there; whatever is open is then closed and the
-    message ended, so the client still receives a well-formed stream. That
-    close runs after the try, not in a finally, so a client disconnect
-    (GeneratorExit) is not answered with more events.
+    _AnthropicStreamConverter).
+
+    A chunk the converter can't read (a JSON value that isn't an object, a
+    null delta, a malformed tool call) is logged and skipped, and the
+    conversion carries on with the next one. An error from the source stream
+    itself ends the conversion there. Either way, whatever is open is closed
+    and the message ended, so the client still receives a well-formed
+    stream. That close runs after the try, not in a finally, so a client
+    disconnect (GeneratorExit, not an Exception) is not answered with more
+    events.
     """
     converter = _AnthropicStreamConverter(model, input_tokens)
     yield converter.message_start()
@@ -867,8 +884,11 @@ async def openai_stream_to_anthropic_stream(openai_stream_generator, model: str 
     try:
         async for chunk in openai_stream_generator:
             for data in _parse_openai_sse_chunk(chunk):
-                for event in converter.handle(data):
-                    yield event
+                try:
+                    for event in converter.handle(data):
+                        yield event
+                except Exception as e:
+                    log.warning('Skipping a chunk the Anthropic stream conversion could not read: %s', e)
     except Exception as e:
         log.error(f'Error in Anthropic stream conversion: {e}')
 
