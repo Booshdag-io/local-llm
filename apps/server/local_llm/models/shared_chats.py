@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 import uuid
 
@@ -50,6 +51,43 @@ class SharedChatResponse(BaseModel):
     share_id: str | None = None  # Alias for id, for backward compat
     updated_at: int
     created_at: int
+
+
+# A file served by the app, as generated images are stored: url-only items
+# ({'type': 'image', 'url': '/api/v1/files/<id>/content'}) and markdown images
+# written into the message text.
+_FILE_URL = re.compile(r'/api/v1/files/([A-Za-z0-9_-]+)')
+
+
+def snapshot_file_ids(chat: dict | None) -> set[str]:
+    """The ids of the files a chat snapshot's messages carry.
+
+    Message files are items like {'type': 'file', 'id': ...}, sometimes with
+    the record nested under 'file', or only a url to the file's content; a
+    message's text can also link a file's content. Only these are visible
+    through a share; files attached to the live chat after it was shared are
+    not.
+    """
+    out: set[str] = set()
+    history = (chat or {}).get('history') or {}
+    messages = list((history.get('messages') or {}).values()) + list((chat or {}).get('messages') or [])
+    for message in messages:
+        if not isinstance(message, dict):
+            continue
+        if isinstance(message.get('content'), str):
+            out.update(_FILE_URL.findall(message['content']))
+        for item in message.get('files') or []:
+            if not isinstance(item, dict):
+                continue
+            for candidate in (
+                item.get('id'),
+                (item.get('file') or {}).get('id') if isinstance(item.get('file'), dict) else None,
+            ):
+                if isinstance(candidate, str) and candidate:
+                    out.add(candidate)
+            if isinstance(item.get('url'), str):
+                out.update(_FILE_URL.findall(item['url']))
+    return out
 
 
 ####################
@@ -180,6 +218,12 @@ class SharedChatsTable:
                 )
                 for sc in result.scalars().all()
             ]
+
+    async def get_chat_ids_by_user_id(self, user_id: str, db: AsyncSession | None = None) -> list[str]:
+        """Every original chat id this user has shared, without the listing's page limit."""
+        async with get_async_db_context(db) as db:
+            result = await db.execute(select(SharedChat.chat_id).filter_by(user_id=user_id).distinct())
+            return [row[0] for row in result.all()]
 
     async def delete_by_id(self, share_id: str, db: AsyncSession | None = None) -> bool:
         """Delete a shared chat by its share token."""

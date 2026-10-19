@@ -308,6 +308,36 @@ if LOG_FORMAT != 'json':
     print(f'Local LLM v{VERSION}{f" (commit {LLLM_BUILD_HASH})" if LLLM_BUILD_HASH != "dev-build" else ""}')
 
 
+async def require_redis(client, attempts: int = 20, delay: float = 0.5):
+    """The Redis client, reachable, or a startup failure saying why.
+
+    Redis holds session revocation: signing out, changing a password and an
+    admin's password reset all record there which tokens stop working, and
+    without it every issued token stays valid until it expires (four weeks by
+    default) while the UI says "please sign in again". So the backend refuses
+    to start without it rather than run with revocation silently off.
+    `make backend` starts it (infra/docker-compose.yml) and sets REDIS_URL;
+    the retries cover the moment between the container starting and
+    accepting connections.
+    """
+    if client is None:
+        raise RuntimeError(
+            'REDIS_URL is not set. Redis is required: it holds session revocation, without which signing out '
+            'and password changes revoke nothing. `make backend` starts it and sets REDIS_URL; a backend '
+            'started by hand needs REDIS_URL=redis://127.0.0.1:6379/0 and the redis service in '
+            'infra/docker-compose.yml running.'
+        )
+    last_error = None
+    for _ in range(attempts):
+        try:
+            await client.ping()
+            return client
+        except Exception as e:  # connection refused while Redis starts
+            last_error = e
+            await asyncio.sleep(delay)
+    raise RuntimeError(f'Redis at REDIS_URL is not reachable: {last_error}')
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Store reference to main event loop for sync->async calls (e.g., embedding generation)
@@ -354,7 +384,7 @@ async def lifespan(app: FastAPI):
     log.info('Installing external dependencies of functions and tools...')
     await install_tool_and_function_dependencies()
 
-    app.state.redis = get_redis_client(async_mode=True)
+    app.state.redis = await require_redis(get_redis_client(async_mode=True))
 
     if app.state.redis is not None:
         app.state.redis_task_command_listener = asyncio.create_task(redis_task_command_listener(app))
@@ -764,7 +794,10 @@ app.add_middleware(AppHTTPMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ALLOW_ORIGIN,
-    allow_credentials=True,
+    # Never with '*': Starlette answers a credentialed request from any origin
+    # by echoing that origin back, which is the same as trusting all of them.
+    # And not with no origins either, which would only add a stray header.
+    allow_credentials=bool(CORS_ALLOW_ORIGIN) and CORS_ALLOW_ORIGIN != ['*'],
     allow_methods=['*'],
     allow_headers=['*'],
 )
@@ -1423,11 +1456,21 @@ async def _link_assistant_messages(chat_id: str, user_message_id, all_assistant_
         )
 
 
+def _admin_reaches_other_chats(user) -> bool:
+    """Whether this user may act on chats other users own.
+
+    An admin may only when ENABLE_ADMIN_CHAT_ACCESS is on: the same rule the
+    chat routers apply to reading, here applied to posting completions into a
+    chat and to listing or stopping its tasks.
+    """
+    return user.role == 'admin' and ENABLE_ADMIN_CHAT_ACCESS
+
+
 async def _persist_follow_up(request: Request, user, metadata: dict, message_ids: list[dict], chat_variables: dict):
     """Save a follow-up in an existing chat: its fields, user message, files and assistant placeholders."""
     chat_id = metadata['chat_id']
     # Existing chat — verify ownership
-    if not await Chats.is_chat_owner(chat_id, user.id) and user.role != 'admin':
+    if not await Chats.is_chat_owner(chat_id, user.id) and not _admin_reaches_other_chats(user):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=ERROR_MESSAGES.DEFAULT(),
@@ -2047,7 +2090,7 @@ async def verify_chat_ownership(chat_id: str | None, user) -> None:
             detail='Channel chats are not supported on this endpoint',
         )
 
-    if user.role != 'admin' and not await Chats.is_chat_owner(chat_id, user.id):
+    if not _admin_reaches_other_chats(user) and not await Chats.is_chat_owner(chat_id, user.id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=ERROR_MESSAGES.DEFAULT(),
@@ -2111,11 +2154,11 @@ async def list_tasks_by_chat_id_endpoint(request: Request, chat_id: str, user=De
     socket_id = get_temporary_chat_session_id(chat_id)
     if socket_id:
         owner_id = get_user_id_from_session_pool(socket_id)
-        if owner_id != user.id and user.role != 'admin':
+        if owner_id != user.id and not _admin_reaches_other_chats(user):
             return {'task_ids': []}
     else:
         chat = await Chats.get_chat_by_id(chat_id)
-        if chat is None or (chat.user_id != user.id and user.role != 'admin'):
+        if chat is None or (chat.user_id != user.id and not _admin_reaches_other_chats(user)):
             return {'task_ids': []}
 
     task_ids = await list_task_ids_by_item_id(request.app.state.redis, chat_id)
@@ -2130,11 +2173,11 @@ async def stop_tasks_by_chat_id_endpoint(request: Request, chat_id: str, user=De
     chat = None
     if socket_id:
         owner_id = get_user_id_from_session_pool(socket_id)
-        if owner_id != user.id and user.role != 'admin':
+        if owner_id != user.id and not _admin_reaches_other_chats(user):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_MESSAGES.NOT_FOUND)
     else:
         chat = await Chats.get_chat_by_id(chat_id)
-        if chat is None or (chat.user_id != user.id and user.role != 'admin'):
+        if chat is None or (chat.user_id != user.id and not _admin_reaches_other_chats(user)):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_MESSAGES.NOT_FOUND)
     result = await stop_item_tasks(request.app.state.redis, chat_id)
 
@@ -2692,6 +2735,13 @@ async def oauth_client_authorize(
         raise HTTPException(status.HTTP_404_NOT_FOUND)
 
     if not await oauth_client_manager._preflight_authorization_url(client, client_info):
+        # Re-registration rewrites a client every user shares, so it is an
+        # admin's action; anyone else is told to ask for it.
+        if user.role != 'admin':
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail='This integration needs to be registered again. Ask an administrator to open it once.',
+            )
         log.info(
             'Detected invalid OAuth client %s; attempting re-registration',
             client_id,

@@ -5,9 +5,7 @@ import logging
 import random
 import sys
 import time
-from typing import Any
 
-import pycrdt as Y
 import socketio
 from socketio.packet import Packet
 
@@ -36,10 +34,9 @@ from local_llm.models.access_grants import AccessGrants
 from local_llm.models.channels import Channels
 from local_llm.models.chats import Chats
 from local_llm.models.folders import Folders
-from local_llm.models.notes import Notes, NoteUpdateForm
+from local_llm.models.notes import Notes
 from local_llm.models.users import UserNameResponse, Users
-from local_llm.socket.utils import RedisDict, RedisLock, YdocManager
-from local_llm.tasks import create_task, stop_item_tasks
+from local_llm.socket.utils import RedisDict, RedisLock
 from local_llm.utils.access_control import has_permission
 from local_llm.utils.auth import get_verified_user_by_token
 from local_llm.utils.chat_id import is_saved_chat_id
@@ -59,8 +56,10 @@ log = logging.getLogger(__name__)
 # cause, and let every message find the room it was meant for.
 REDIS = None
 
-# Configure CORS for Socket.IO
-SOCKETIO_CORS_ORIGINS = '*' if CORS_ALLOW_ORIGIN == ['*'] else CORS_ALLOW_ORIGIN
+# Configure CORS for Socket.IO. No configured origins means None (same-origin
+# only), never []: python-socketio reads an empty list as "do not check the
+# origin at all".
+SOCKETIO_CORS_ORIGINS = '*' if CORS_ALLOW_ORIGIN == ['*'] else (CORS_ALLOW_ORIGIN or None)
 
 
 def get_room_sid_map(manager, namespace: str, room: str):
@@ -72,11 +71,6 @@ class JSONOnlyPacket(Packet):
     """Packet class for JSON-serializable payloads only, skipping python-socketio's per-emit binary scan."""
 
     uses_binary_events = False
-
-    @classmethod
-    def reconstruct_binary(cls, data: Any, attachments: list[bytes]):
-        """Normalize client attachments to int lists, the form the Yjs handlers store and apply."""
-        return super().reconstruct_binary(data, [list(attachment) for attachment in attachments])
 
 
 if WEBSOCKET_MANAGER == 'redis':
@@ -183,12 +177,6 @@ else:
 
     aquire_func = release_func = renew_func = lambda: True
     session_aquire_func = session_release_func = session_renew_func = lambda: True
-
-
-YDOC_MANAGER = YdocManager(
-    redis=REDIS,
-    redis_key_prefix=f'{REDIS_KEY_PREFIX}:ydoc:documents',
-)
 
 
 def get_session_pool_batches():
@@ -368,6 +356,36 @@ async def enter_room_for_users(room: str, user_ids: list[str]):
                 await sio.enter_room(sid, room)
     except Exception as e:
         log.debug('Failed to make users %s join room %s: %s', user_ids, room, e)
+
+
+async def prune_room(room: str, may_stay) -> list[str]:
+    """Remove from a room every session whose user no longer passes `may_stay(user)`.
+
+    Rooms are where live events go (message bodies, edits, model streams),
+    and joining one is the only check: removing a member, revoking a grant or
+    changing a channel's access changes the database, not the room. Callers
+    run this after any such change, with the same rule the join used.
+    `may_stay` receives the session's user dict (id, role) and is awaited.
+    Returns the session ids removed.
+    """
+    removed = []
+    for sid in get_session_ids_from_room(room):
+        user = SESSION_POOL.get(sid) or {}
+        try:
+            stays = bool(user.get('id')) and await may_stay(user)
+        except Exception as e:
+            log.debug('Access check for room %s failed, removing session %s: %s', room, sid, e)
+            stays = False
+        if not stays:
+            await sio.leave_room(sid, room)
+            removed.append(sid)
+    return removed
+
+
+async def close_room(room: str) -> None:
+    """Remove every session from a room whose resource no longer exists."""
+    for sid in get_session_ids_from_room(room):
+        await sio.leave_room(sid, room)
 
 
 async def disconnect_user_sessions(user_id: str):
@@ -624,306 +642,6 @@ async def chat_events(sid, data):
             log.exception('Failed to cancel chat.read timers for chat %s', data.get('chat_id'))
 
 
-def normalize_document_id(document_id: str) -> str:
-    """Canonicalize document IDs to prevent auth bypass via prefix variants.
-
-    YdocManager normalizes storage keys by replacing ":" with "_", so
-    "note_abc" and "note:abc" resolve to the same underlying document.
-    We must rewrite underscore-prefixed IDs back to the colon form so
-    that authorization checks (which key on "note:") always fire.
-    """
-    if document_id.startswith('note_'):
-        document_id = 'note:' + document_id[5:]
-    return document_id
-
-
-@sio.on('ydoc:document:join')
-async def ydoc_document_join(sid, data):
-    """Handle user joining a document"""
-    user = await get_socket_session_user(sid)
-    if not user:
-        return
-
-    try:
-        document_id = normalize_document_id(data['document_id'])
-
-        if document_id.startswith('note:'):
-            note_id = document_id.split(':')[1]
-            note = await Notes.get_note_by_id(note_id)
-            if not note:
-                log.error(f'Note {note_id} not found')
-                return
-
-            if (
-                user.get('role') != 'admin'
-                and user.get('id') != note.user_id
-                and not await AccessGrants.has_access(
-                    user_id=user.get('id'),
-                    resource_type='note',
-                    resource_id=note.id,
-                    permission='read',
-                )
-            ):
-                log.error(f'User {user.get("id")} does not have access to note {note_id}')
-                return
-
-        user_id = data.get('user_id', sid)
-        user_name = data.get('user_name', 'Anonymous')
-        user_color = data.get('user_color', '#000000')
-
-        log.info('User %s joining document %s', user_id, document_id)
-        await YDOC_MANAGER.add_user(document_id=document_id, user_id=sid)
-
-        # Join Socket.IO room
-        await sio.enter_room(sid, f'doc_{document_id}')
-
-        active_session_ids = get_session_ids_from_room(f'doc_{document_id}')
-
-        # Get the Yjs document state
-        ydoc = Y.Doc()
-        updates = await YDOC_MANAGER.get_updates(document_id)
-        for update in updates:
-            ydoc.apply_update(bytes(update))
-
-        # Encode the entire document state as an update
-        state_update = ydoc.get_update()
-        await sio.emit(
-            'ydoc:document:state',
-            {
-                'document_id': document_id,
-                'state': list(state_update),  # Convert bytes to list for JSON
-                'sessions': active_session_ids,
-            },
-            room=sid,
-        )
-
-        # Notify other users about the new user
-        await sio.emit(
-            'ydoc:user:joined',
-            {
-                'document_id': document_id,
-                'user_id': user_id,
-                'user_name': user_name,
-                'user_color': user_color,
-            },
-            room=f'doc_{document_id}',
-            skip_sid=sid,
-        )
-
-        log.info('User %s successfully joined document %s', user_id, document_id)
-
-    except Exception as e:
-        log.error(f'Error in yjs_document_join: {e}')
-        await sio.emit('error', {'message': 'Failed to join document'}, room=sid)
-
-
-async def document_save_handler(document_id, data, user):
-    document_id = normalize_document_id(document_id)
-
-    if document_id.startswith('note:'):
-        note_id = document_id.split(':')[1]
-        note = await Notes.get_note_by_id(note_id)
-        if not note:
-            log.error(f'Note {note_id} not found')
-            return
-
-        if (
-            user.get('role') != 'admin'
-            and user.get('id') != note.user_id
-            and not await AccessGrants.has_access(
-                user_id=user.get('id'),
-                resource_type='note',
-                resource_id=note.id,
-                permission='write',
-            )
-        ):
-            log.error(f'User {user.get("id")} does not have write access to note {note_id}')
-            return
-
-        await Notes.update_note_by_id(note_id, NoteUpdateForm(data=data))
-
-
-@sio.on('ydoc:document:state')
-async def yjs_document_state(sid, data):
-    """Send the current state of the Yjs document to the user"""
-    try:
-        document_id = data['document_id']
-
-        document_id = normalize_document_id(document_id)
-        room = f'doc_{document_id}'
-
-        active_session_ids = get_session_ids_from_room(room)
-
-        if sid not in active_session_ids:
-            log.warning(f'Session {sid} not in room {room}. Cannot send state.')
-            return
-
-        if not await YDOC_MANAGER.document_exists(document_id):
-            log.warning(f'Document {document_id} not found')
-            return
-
-        # Get the Yjs document state
-        ydoc = Y.Doc()
-        updates = await YDOC_MANAGER.get_updates(document_id)
-        for update in updates:
-            ydoc.apply_update(bytes(update))
-
-        # Encode the entire document state as an update
-        state_update = ydoc.get_update()
-
-        await sio.emit(
-            'ydoc:document:state',
-            {
-                'document_id': document_id,
-                'state': list(state_update),  # Convert bytes to list for JSON
-                'sessions': active_session_ids,
-            },
-            room=sid,
-        )
-    except Exception as e:
-        log.error(f'Error in yjs_document_state: {e}')
-
-
-@sio.on('ydoc:document:update')
-async def yjs_document_update(sid, data):
-    """Handle Yjs document updates"""
-    try:
-        document_id = data['document_id']
-
-        document_id = normalize_document_id(document_id)
-
-        # Verify the sender actually joined this document room
-        room = f'doc_{document_id}'
-        active_session_ids = get_session_ids_from_room(room)
-        if sid not in active_session_ids:
-            log.warning(f'Session {sid} not in room {room}. Rejecting update.')
-            return
-
-        # Verify write permission — room membership only proves read access
-        user = await get_socket_session_user(sid)
-        if not user:
-            return
-
-        if document_id.startswith('note:'):
-            note_id = document_id.split(':')[1]
-            note = await Notes.get_note_by_id(note_id)
-            if not note:
-                log.error(f'Note {note_id} not found')
-                return
-
-            if (
-                user.get('role') != 'admin'
-                and user.get('id') != note.user_id
-                and not await AccessGrants.has_access(
-                    user_id=user.get('id'),
-                    resource_type='note',
-                    resource_id=note.id,
-                    permission='write',
-                )
-            ):
-                log.warning(f'User {user.get("id")} does not have write access to note {note_id}. Rejecting update.')
-                return
-
-        user_id = data.get('user_id', sid)
-
-        update = data['update']  # List of bytes from frontend
-
-        await YDOC_MANAGER.append_to_updates(
-            document_id=document_id,
-            update=update,  # Convert list of bytes to bytes
-        )
-
-        # Broadcast update to all other users in the document
-        await sio.emit(
-            'ydoc:document:update',
-            {
-                'document_id': document_id,
-                'user_id': user_id,
-                'update': update,
-                'socket_id': sid,  # Add socket_id to match frontend filtering
-            },
-            room=f'doc_{document_id}',
-            skip_sid=sid,
-        )
-
-        async def debounced_save():
-            await asyncio.sleep(0.5)
-            await document_save_handler(document_id, data.get('data', {}), user)
-
-        if data.get('data'):
-            # Only drop the pending save when a new one takes its place.
-            # Updates without a content snapshot (the resync a client sends
-            # after rejoining a document) would otherwise cancel the pending
-            # save without scheduling a replacement, so the edits made just
-            # before the resync never reach the database.
-            try:
-                await stop_item_tasks(REDIS, document_id)
-            except Exception:
-                pass
-
-            await create_task(REDIS, debounced_save(), document_id)
-
-    except Exception as e:
-        log.error(f'Error in yjs_document_update: {e}')
-
-
-@sio.on('ydoc:document:leave')
-async def yjs_document_leave(sid, data):
-    """Handle user leaving a document"""
-    user = await get_socket_session_user(sid)
-    if not user:  # authenticated session required (parity with sibling handlers)
-        return
-    try:
-        document_id = normalize_document_id(data['document_id'])
-
-        log.info('User %s leaving document %s', user['id'], document_id)
-
-        # Remove user from the document
-        await YDOC_MANAGER.remove_user(document_id=document_id, user_id=sid)
-
-        # Leave Socket.IO room
-        await sio.leave_room(sid, f'doc_{document_id}')
-
-        # Notify other users; user_id is the authenticated identity, not client-supplied
-        await sio.emit(
-            'ydoc:user:left',
-            {'document_id': document_id, 'user_id': user['id']},
-            room=f'doc_{document_id}',
-        )
-
-        if await YDOC_MANAGER.document_exists(document_id) and len(await YDOC_MANAGER.get_users(document_id)) == 0:
-            log.info('Cleaning up document %s as no users are left', document_id)
-            await YDOC_MANAGER.clear_document(document_id)
-
-    except Exception as e:
-        log.error(f'Error in yjs_document_leave: {e}')
-
-
-@sio.on('ydoc:awareness:update')
-async def yjs_awareness_update(sid, data):
-    """Handle awareness updates (cursors, selections, etc.)"""
-    user = await get_socket_session_user(sid)
-    if not user:  # authenticated session required (parity with sibling handlers)
-        return
-    try:
-        document_id = normalize_document_id(data['document_id'])
-        room = f'doc_{document_id}'
-        if room not in sio.rooms(sid):  # must have joined the document first
-            return
-        update = data['update']
-
-        # Broadcast to the room; user_id is the authenticated identity, not client-supplied
-        await sio.emit(
-            'ydoc:awareness:update',
-            {'document_id': document_id, 'user_id': user['id'], 'update': update},
-            room=room,
-            skip_sid=sid,
-        )
-
-    except Exception as e:
-        log.error(f'Error in yjs_awareness_update: {e}')
-
-
 @sio.event
 async def disconnect(sid, reason=None):
     if sid in SESSION_POOL:
@@ -938,7 +656,6 @@ async def disconnect(sid, reason=None):
                 else:
                     USAGE_POOL[model_id] = connections
 
-        await YDOC_MANAGER.remove_user_from_all_documents(sid)
     else:
         pass
         # print(f"Unknown session ID {sid} disconnected")

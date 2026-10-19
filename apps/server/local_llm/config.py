@@ -113,6 +113,17 @@ for file_path in FRONTEND_STATIC_DIR.glob('**/*'):
         except Exception as e:
             logging.error(f'An error occurred: {e}')
 
+# The default avatar (profile/image falls back to {STATIC_DIR}/user.png) lives
+# at the frontend's root, not under static/, so the loop above never copied it
+# and every default avatar was a 500 (#299). The build first, then the source.
+for default_avatar in (FRONTEND_BUILD_DIR / 'user.png', FRONTEND_BUILD_DIR.parent / 'public' / 'user.png'):
+    if default_avatar.exists():
+        try:
+            shutil.copyfile(default_avatar, STATIC_DIR / 'user.png')
+        except Exception as e:
+            logging.error(f'An error occurred: {e}')
+        break
+
 frontend_favicon = FRONTEND_STATIC_DIR / 'favicon.png'
 
 if frontend_favicon.exists():
@@ -1881,12 +1892,18 @@ def validate_cors_origin(origin):
         raise ValueError(f"Invalid URL structure in CORS_ALLOW_ORIGIN: '{origin}'.")
 
 
-# For production, you should only need one host as
-# fastapi serves the svelte-kit built frontend and backend from the same host and port.
-# To test CORS_ALLOW_ORIGIN locally, you can set something like
-# CORS_ALLOW_ORIGIN=http://localhost:5173;http://localhost:8080
-# in your .env file depending on your frontend port, 5173 in this case.
-CORS_ALLOW_ORIGIN = os.getenv('CORS_ALLOW_ORIGIN', '*').split(';')
+# Empty by default: the backend serves the built frontend from its own origin,
+# and `make frontend`'s dev server proxies the API, so neither needs a
+# cross-origin grant. A list (`http://localhost:5174;http://127.0.0.1:5174`,
+# as `make backend` sets) grants those origins credentialed access. '*' is
+# accepted but never with credentials (see main.py): with credentials,
+# Starlette would echo any requesting origin back, letting a page on another
+# port of the same host act as the signed-in user.
+def cors_origins(value: str) -> list[str]:
+    return [origin.strip() for origin in value.split(';') if origin.strip()]
+
+
+CORS_ALLOW_ORIGIN = cors_origins(os.getenv('CORS_ALLOW_ORIGIN', ''))
 
 # Allows custom URL schemes (e.g., app://) to be used as origins for CORS.
 # Useful for local development or desktop clients with schemes like app:// or other custom protocols.
@@ -1894,7 +1911,10 @@ CORS_ALLOW_ORIGIN = os.getenv('CORS_ALLOW_ORIGIN', '*').split(';')
 CORS_ALLOW_CUSTOM_SCHEME = os.getenv('CORS_ALLOW_CUSTOM_SCHEME', '').split(';')
 
 if CORS_ALLOW_ORIGIN == ['*']:
-    log.warning("\n\nWARNING: CORS_ALLOW_ORIGIN IS SET TO '*' - NOT RECOMMENDED FOR PRODUCTION DEPLOYMENTS.\n")
+    log.warning(
+        "\n\nWARNING: CORS_ALLOW_ORIGIN IS SET TO '*'. Any origin may call the API, without cookies; "
+        'list the origins that need credentialed access instead.\n'
+    )
 else:
     # You have to pick between a single wildcard or a list of origins.
     # Doing both will result in CORS errors in the browser.
