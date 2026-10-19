@@ -28,8 +28,8 @@ async def get_compare(
 ):
     if by == 'serving':
         facts = await compare_logic.serving_summary()
-        derived_columns, derived, notes = compare_logic.serving_rows(facts)
-        return {'derived_columns': derived_columns, 'derived': derived, 'notes': notes}
+        rows, derived, notes = compare_logic.serving_rows(facts)
+        return {'rows': rows, 'derived': derived, 'notes': notes}
 
     records = await compare_logic.fetch_results(tier=tier)
     blocks = await compare_logic.fetch_config_blocks()
@@ -42,8 +42,8 @@ async def get_compare(
     if by == 'failures':
         return {'rows': compare_logic.failure_rows(groups), 'notes': notes}
 
-    rows = compare_logic.rows_for(groups, blocks, baseline=baseline)
-    return {'rows': rows, 'notes': notes}
+    rows, compared = compare_logic.rows_for(groups, blocks, baseline=baseline)
+    return {'rows': rows, 'blocks': compared, 'notes': notes}
 
 
 class ExportAnswersForm(BaseModel):
