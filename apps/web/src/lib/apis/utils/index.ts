@@ -1,4 +1,5 @@
 import { WEBUI_API_BASE_URL } from '@/lib/constants';
+import { errorBody, errorDetail, requestError } from '@/lib/apis/errors';
 
 export const getGravatarUrl = async (token: string, email: string) => {
 	let error = null;
@@ -11,12 +12,12 @@ export const getGravatarUrl = async (token: string, email: string) => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
-			error = err.detail ?? err;
+			error = errorDetail(err);
 			return null;
 		});
 
@@ -41,15 +42,15 @@ export const executeCode = async (token: string, code: string) => {
 		})
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
 
-			error = err;
+			error = requestError(err);
 			if (err.detail) {
-				error = err.detail;
+				error = errorDetail(err);
 			}
 			return null;
 		});
@@ -75,15 +76,15 @@ export const formatPythonCode = async (token: string, code: string) => {
 		})
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
 
-			error = err;
+			error = requestError(err);
 			if (err.detail) {
-				error = err.detail;
+				error = errorDetail(err);
 			}
 			return null;
 		});
@@ -110,14 +111,16 @@ export const downloadChatAsPDF = async (token: string, title: string, messages: 
 		})
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.blob();
 		})
 		.catch((err) => {
 			console.error(err);
-			error = err;
+			error = requestError(err);
 			return null;
 		});
+
+	if (error) throw error;
 
 	return blob;
 };
@@ -134,7 +137,7 @@ export const downloadDatabase = async (token: string) => {
 	})
 		.then(async (response) => {
 			if (!response.ok) {
-				throw await response.json();
+				throw await errorBody(response);
 			}
 			return response.blob();
 		})
@@ -149,7 +152,7 @@ export const downloadDatabase = async (token: string) => {
 		})
 		.catch((err) => {
 			console.error(err);
-			error = err.detail;
+			error = errorDetail(err);
 			return null;
 		});
 

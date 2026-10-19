@@ -6,14 +6,7 @@
 // pre-existing Optional-typing debt (docs/decisions.md, 2026-09-15 entry).
 import { WEBUI_API_BASE_URL } from '@/lib/constants';
 import { getTimeRange } from '@/lib/utils/api-helpers';
-
-const getErrorDetail = (err: any) => {
-	if (Array.isArray(err?.detail)) {
-		return err.detail.map((e: { msg?: string }) => e.msg || JSON.stringify(e)).join(', ');
-	}
-
-	return err?.detail ?? err;
-};
+import { errorBody, errorDetail, requestError } from '@/lib/apis/errors';
 
 export const getChatConfig = async (token: string) => {
 	let error = null;
@@ -27,11 +20,11 @@ export const getChatConfig = async (token: string) => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
-			error = getErrorDetail(err);
+			error = errorDetail(err);
 			console.error(err);
 			return null;
 		});
@@ -56,11 +49,11 @@ export const updateChatConfig = async (token: string, config: object) => {
 		body: JSON.stringify(config)
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
-			error = getErrorDetail(err);
+			error = errorDetail(err);
 			console.error(err);
 			return null;
 		});
@@ -94,11 +87,11 @@ export const createNewChat = async (
 		})
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
-			error = getErrorDetail(err);
+			error = errorDetail(err);
 			console.error(err);
 			return null;
 		});
@@ -122,14 +115,14 @@ export const unarchiveAllChats = async (token: string) => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = err.detail;
+			error = errorDetail(err);
 
 			console.error(err);
 			return null;
@@ -154,14 +147,14 @@ export const unshareAllChats = async (token: string) => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = err.detail;
+			error = errorDetail(err);
 
 			console.error(err);
 			return null;
@@ -189,11 +182,11 @@ export const importChats = async (token: string, chats: object[]) => {
 		})
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
-			error = getErrorDetail(err);
+			error = errorDetail(err);
 			console.error(err);
 			return null;
 		});
@@ -235,14 +228,14 @@ export const getChatList = async (
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = getErrorDetail(err);
+			error = errorDetail(err);
 			console.error(err);
 			return null;
 		});
@@ -285,14 +278,14 @@ export const getChatListByUserId = async (token: string = '', userId: string, pa
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = getErrorDetail(err);
+			error = errorDetail(err);
 			console.error(err);
 			return null;
 		});
@@ -330,14 +323,14 @@ export const getArchivedChatList = async (token: string = '', page: number = 1, 
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = getErrorDetail(err);
+			error = errorDetail(err);
 			console.error(err);
 			return null;
 		});
@@ -364,11 +357,11 @@ export const getArchivedChatCount = async (token: string = '') => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
-			error = getErrorDetail(err);
+			error = errorDetail(err);
 			console.error(err);
 			return null;
 		});
@@ -403,14 +396,14 @@ export const getSharedChatList = async (token: string = '', page: number = 1, fi
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = getErrorDetail(err);
+			error = errorDetail(err);
 			console.error(err);
 			return null;
 		});
@@ -435,9 +428,9 @@ export const getAllChats = async (token: string) => {
 	});
 
 	if (!res.ok) {
-		const err = await res.json();
+		const err = await errorBody(res);
 		console.error(err);
-		throw err;
+		throw errorDetail(err);
 	}
 
 	const reader = res.body?.getReader();
@@ -491,14 +484,14 @@ export const getChatListBySearchText = async (token: string, text: string, page:
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = getErrorDetail(err);
+			error = errorDetail(err);
 			console.error(err);
 			return null;
 		});
@@ -525,14 +518,14 @@ export const getChatsByFolderId = async (token: string, folderId: string) => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = getErrorDetail(err);
+			error = errorDetail(err);
 			console.error(err);
 			return null;
 		});
@@ -561,14 +554,14 @@ export const getChatListByFolderId = async (token: string, folderId: string, pag
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = getErrorDetail(err);
+			error = errorDetail(err);
 			console.error(err);
 			return null;
 		});
@@ -592,14 +585,14 @@ export const getAllArchivedChats = async (token: string) => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = getErrorDetail(err);
+			error = errorDetail(err);
 			console.error(err);
 			return null;
 		});
@@ -623,14 +616,14 @@ export const getAllUserChats = async (token: string) => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = getErrorDetail(err);
+			error = errorDetail(err);
 			console.error(err);
 			return null;
 		});
@@ -654,14 +647,14 @@ export const getAllTags = async (token: string) => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = getErrorDetail(err);
+			error = errorDetail(err);
 			console.error(err);
 			return null;
 		});
@@ -685,14 +678,14 @@ export const getPinnedChatList = async (token: string = '') => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = getErrorDetail(err);
+			error = errorDetail(err);
 			console.error(err);
 			return null;
 		});
@@ -722,14 +715,14 @@ export const getChatListByTagName = async (token: string = '', tagName: string) 
 		})
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = getErrorDetail(err);
+			error = errorDetail(err);
 			console.error(err);
 			return null;
 		});
@@ -756,14 +749,14 @@ export const getChatById = async (token: string, id: string) => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = err.detail;
+			error = errorDetail(err);
 
 			console.error(err);
 			return null;
@@ -788,14 +781,14 @@ export const getChatByShareId = async (token: string, share_id: string) => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = getErrorDetail(err);
+			error = errorDetail(err);
 
 			console.error(err);
 			return null;
@@ -820,19 +813,19 @@ export const getChatPinnedStatusById = async (token: string, id: string) => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = err;
+			error = requestError(err);
 
 			if ('detail' in err) {
-				error = err.detail;
+				error = errorDetail(err);
 			} else {
-				error = err;
+				error = requestError(err);
 			}
 
 			console.error(err);
@@ -858,19 +851,19 @@ export const toggleChatPinnedStatusById = async (token: string, id: string) => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = err;
+			error = requestError(err);
 
 			if ('detail' in err) {
-				error = err.detail;
+				error = errorDetail(err);
 			} else {
-				error = err;
+				error = requestError(err);
 			}
 
 			console.error(err);
@@ -896,11 +889,11 @@ export const markChatUnreadById = async (token: string, id: string) => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
-			error = 'detail' in err ? err.detail : err;
+			error = errorDetail(err);
 			console.error(err);
 			return null;
 		});
@@ -924,11 +917,11 @@ export const markChatsRead = async (token: string) => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
-			error = 'detail' in err ? err.detail : err;
+			error = errorDetail(err);
 			console.error(err);
 			return null;
 		});
@@ -955,19 +948,19 @@ export const cloneChatById = async (token: string, id: string, title?: string) =
 		})
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = err;
+			error = requestError(err);
 
 			if ('detail' in err) {
-				error = err.detail;
+				error = errorDetail(err);
 			} else {
-				error = err;
+				error = requestError(err);
 			}
 
 			console.error(err);
@@ -996,19 +989,19 @@ export const forkChatById = async (token: string, id: string, messageId?: string
 		})
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = err;
+			error = requestError(err);
 
 			if ('detail' in err) {
-				error = err.detail;
+				error = errorDetail(err);
 			} else {
-				error = err;
+				error = requestError(err);
 			}
 
 			console.error(err);
@@ -1034,19 +1027,19 @@ export const cloneSharedChatById = async (token: string, id: string) => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = err;
+			error = requestError(err);
 
 			if ('detail' in err) {
-				error = err.detail;
+				error = errorDetail(err);
 			} else {
-				error = err;
+				error = requestError(err);
 			}
 
 			console.error(err);
@@ -1072,14 +1065,14 @@ export const shareChatById = async (token: string, id: string) => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = getErrorDetail(err);
+			error = errorDetail(err);
 
 			console.error(err);
 			return null;
@@ -1107,14 +1100,14 @@ export const updateChatFolderIdById = async (token: string, id: string, folderId
 		})
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = getErrorDetail(err);
+			error = errorDetail(err);
 
 			console.error(err);
 			return null;
@@ -1139,14 +1132,14 @@ export const archiveChatById = async (token: string, id: string) => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = getErrorDetail(err);
+			error = errorDetail(err);
 
 			console.error(err);
 			return null;
@@ -1171,14 +1164,14 @@ export const deleteSharedChatById = async (token: string, id: string) => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = getErrorDetail(err);
+			error = errorDetail(err);
 
 			console.error(err);
 			return null;
@@ -1206,14 +1199,14 @@ export const updateChatAccessGrants = async (token: string, id: string, accessGr
 		})
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = getErrorDetail(err);
+			error = errorDetail(err);
 
 			console.error(err);
 			return null;
@@ -1238,14 +1231,14 @@ export const getChatAccessGrants = async (token: string, id: string) => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = getErrorDetail(err);
+			error = errorDetail(err);
 
 			console.error(err);
 			return null;
@@ -1274,14 +1267,14 @@ export const updateChatById = async (token: string, id: string, chat: object, va
 		})
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = getErrorDetail(err);
+			error = errorDetail(err);
 
 			console.error(err);
 			return null;
@@ -1307,14 +1300,14 @@ export const compactChatById = async (token: string, id: string, model?: string 
 		body: JSON.stringify({ model })
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = getErrorDetail(err);
+			error = errorDetail(err);
 
 			console.error(err);
 			return null;
@@ -1339,11 +1332,11 @@ export const deleteChatMessageById = async (token: string, id: string, messageId
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
-			error = getErrorDetail(err);
+			error = errorDetail(err);
 			console.error(err);
 			return null;
 		});
@@ -1379,11 +1372,11 @@ export const resolveChatMessageToolCall = async (
 		})
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
-			error = getErrorDetail(err);
+			error = errorDetail(err);
 			console.error(err);
 			return null;
 		});
@@ -1407,14 +1400,14 @@ export const deleteChatById = async (token: string, id: string) => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = err.detail;
+			error = errorDetail(err);
 
 			console.error(err);
 			return null;
@@ -1439,14 +1432,14 @@ export const getTagsById = async (token: string, id: string) => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = getErrorDetail(err);
+			error = errorDetail(err);
 
 			console.error(err);
 			return null;
@@ -1474,14 +1467,14 @@ export const addTagById = async (token: string, id: string, tagName: string) => 
 		})
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = err.detail;
+			error = errorDetail(err);
 			console.error(err);
 			return null;
 		});
@@ -1508,14 +1501,14 @@ export const deleteTagById = async (token: string, id: string, tagName: string) 
 		})
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = getErrorDetail(err);
+			error = errorDetail(err);
 
 			console.error(err);
 			return null;
@@ -1540,14 +1533,14 @@ export const deleteAllChats = async (token: string) => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = err.detail;
+			error = errorDetail(err);
 
 			console.error(err);
 			return null;
@@ -1572,14 +1565,14 @@ export const archiveAllChats = async (token: string) => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.then((json) => {
 			return json;
 		})
 		.catch((err) => {
-			error = err.detail;
+			error = errorDetail(err);
 
 			console.error(err);
 			return null;

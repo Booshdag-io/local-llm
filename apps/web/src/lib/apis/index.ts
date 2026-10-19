@@ -8,6 +8,7 @@ import { WEBUI_BASE_URL } from '@/lib/constants';
 import { convertOpenApiToToolPayload } from '@/lib/utils/api-helpers';
 import { normalizeTags } from '@/lib/utils/tags';
 import { getOpenAIModelsDirect } from './openai';
+import { errorBody, errorDetail, requestError } from '@/lib/apis/errors';
 
 const TOOL_SERVER_FETCH_TIMEOUT = 10000;
 
@@ -38,11 +39,11 @@ export const getModels = async (
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
-			error = err;
+			error = requestError(err);
 			console.error(err);
 			return null;
 		});
@@ -187,15 +188,15 @@ export const unloadModel = async (token: string, model: string) => {
 		body: JSON.stringify({ model })
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
 			if ('detail' in err) {
-				error = err.detail;
+				error = errorDetail(err);
 			} else {
-				error = err;
+				error = requestError(err);
 			}
 			return null;
 		});
@@ -230,15 +231,15 @@ export const chatCompleted = async (token: string, body: ChatCompletedForm) => {
 		body: JSON.stringify(body)
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
 			if ('detail' in err) {
-				error = err.detail;
+				error = errorDetail(err);
 			} else {
-				error = err;
+				error = requestError(err);
 			}
 			return null;
 		});
@@ -274,15 +275,15 @@ export const chatAction = async (token: string, action_id: string, body: ChatAct
 		body: JSON.stringify(body)
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
 			if ('detail' in err) {
-				error = err.detail;
+				error = errorDetail(err);
 			} else {
-				error = err;
+				error = requestError(err);
 			}
 			return null;
 		});
@@ -306,15 +307,15 @@ export const stopTask = async (token: string, id: string) => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
 			if ('detail' in err) {
-				error = err.detail;
+				error = errorDetail(err);
 			} else {
-				error = err;
+				error = requestError(err);
 			}
 			return null;
 		});
@@ -338,15 +339,15 @@ export const stopTasksByChatId = async (token: string, chat_id: string) => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
 			if ('detail' in err) {
-				error = err.detail;
+				error = errorDetail(err);
 			} else {
-				error = err;
+				error = requestError(err);
 			}
 			return null;
 		});
@@ -370,15 +371,15 @@ export const getTaskIdsByChatId = async (token: string, chat_id: string) => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
 			if ('detail' in err) {
-				error = err.detail;
+				error = errorDetail(err);
 			} else {
-				error = err;
+				error = requestError(err);
 			}
 			return null;
 		});
@@ -409,7 +410,7 @@ export const getToolServerData = async (token: string, url: string) => {
 				const [text, { parse }] = await Promise.all([res.text(), import('yaml')]);
 				return parse(text);
 			} else {
-				if (!res.ok) throw await res.json();
+				if (!res.ok) throw await errorBody(res);
 				return res.json();
 			}
 		})
@@ -418,9 +419,9 @@ export const getToolServerData = async (token: string, url: string) => {
 			if (err?.name === 'TimeoutError') {
 				error = `Connection to ${url} timed out`;
 			} else if ('detail' in err) {
-				error = err.detail;
+				error = errorDetail(err);
 			} else {
-				error = err;
+				error = requestError(err);
 			}
 			return null;
 		});
@@ -462,7 +463,7 @@ export const getToolServersData = async (servers: object[]) => {
 								? server?.path
 								: `${server?.url}${(server?.path ?? '').startsWith('/') ? '' : '/'}${server?.path}`
 						).catch((err) => {
-							error = err;
+							error = requestError(err);
 							return null;
 						});
 					} else if ((specType === 'json' && server?.spec) ?? null) {
@@ -697,12 +698,12 @@ export const getTaskConfig = async (token: string = '') => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
-			error = err;
+			error = requestError(err);
 			return null;
 		});
 
@@ -726,15 +727,15 @@ export const updateTaskConfig = async (token: string, config: object) => {
 		body: JSON.stringify(config)
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
 			if ('detail' in err) {
-				error = err.detail;
+				error = errorDetail(err);
 			} else {
-				error = err;
+				error = requestError(err);
 			}
 			return null;
 		});
@@ -763,13 +764,13 @@ export const generateTitle = async (token: string = '', model: string, messages:
 		})
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
 			if ('detail' in err) {
-				error = err.detail;
+				error = errorDetail(err);
 			}
 			return null;
 		});
@@ -830,13 +831,13 @@ export const generateTags = async (token: string = '', model: string, messages: 
 		})
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
 			if ('detail' in err) {
-				error = err.detail;
+				error = errorDetail(err);
 			}
 			return null;
 		});
@@ -897,13 +898,13 @@ export const generateEmoji = async (token: string = '', model: string, prompt: s
 		})
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
 			if ('detail' in err) {
-				error = err.detail;
+				error = errorDetail(err);
 			}
 			return null;
 		});
@@ -949,13 +950,13 @@ export const generateQueries = async (
 		})
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
 			if ('detail' in err) {
-				error = err.detail;
+				error = errorDetail(err);
 			}
 			return null;
 		});
@@ -1023,13 +1024,13 @@ export const generateAutoCompletion = async (
 		})
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
 			if ('detail' in err) {
-				error = err.detail;
+				error = errorDetail(err);
 			}
 			return null;
 		});
@@ -1087,7 +1088,7 @@ export const generateMoACompletion = async (token: string = '', model: string, p
 		})
 	}).catch((err) => {
 		console.error(err);
-		error = err;
+		error = requestError(err);
 		return null;
 	});
 
@@ -1110,12 +1111,12 @@ export const getPipelinesList = async (token: string = '') => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
-			error = err;
+			error = requestError(err);
 			return null;
 		});
 
@@ -1144,15 +1145,15 @@ export const uploadPipeline = async (token: string, file: File, urlIdx: string) 
 		body: formData
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
 			if ('detail' in err) {
-				error = err.detail;
+				error = errorDetail(err);
 			} else {
-				error = err;
+				error = requestError(err);
 			}
 			return null;
 		});
@@ -1180,15 +1181,15 @@ export const downloadPipeline = async (token: string, url: string, urlIdx: strin
 		})
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
 			if ('detail' in err) {
-				error = err.detail;
+				error = errorDetail(err);
 			} else {
-				error = err;
+				error = requestError(err);
 			}
 			return null;
 		});
@@ -1216,15 +1217,15 @@ export const deletePipeline = async (token: string, id: string, urlIdx: string) 
 		})
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
 			if ('detail' in err) {
-				error = err.detail;
+				error = errorDetail(err);
 			} else {
-				error = err;
+				error = requestError(err);
 			}
 			return null;
 		});
@@ -1253,12 +1254,12 @@ export const getPipelines = async (token: string, urlIdx?: string) => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
-			error = err;
+			error = requestError(err);
 			return null;
 		});
 
@@ -1287,12 +1288,12 @@ export const getPipelineValves = async (token: string, pipeline_id: string, urlI
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
-			error = err;
+			error = requestError(err);
 			return null;
 		});
 
@@ -1320,12 +1321,12 @@ export const getPipelineValvesSpec = async (token: string, pipeline_id: string, 
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
-			error = err;
+			error = requestError(err);
 			return null;
 		});
 
@@ -1357,16 +1358,16 @@ export const updatePipelineValves = async (token: string = '', pipeline_id: stri
 		}
 	)
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
 
 			if ('detail' in err) {
-				error = err.detail;
+				error = errorDetail(err);
 			} else {
-				error = err;
+				error = requestError(err);
 			}
 			return null;
 		});
@@ -1389,12 +1390,12 @@ export const getUsage = async (token: string = '') => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
-			error = err;
+			error = requestError(err);
 			return null;
 		});
 
@@ -1416,12 +1417,12 @@ export const getBackendConfig = async () => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
-			error = err;
+			error = requestError(err);
 			return null;
 		});
 
@@ -1466,12 +1467,12 @@ export const getVersion = async (token: string) => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
-			error = err;
+			error = requestError(err);
 			return null;
 		});
 
@@ -1515,12 +1516,12 @@ export const getEvents = async (token: string): Promise<{ schema: string; events
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
-			error = err;
+			error = requestError(err);
 			return null;
 		});
 
@@ -1542,12 +1543,12 @@ export const getEventWebhooks = async (token: string): Promise<EventWebhook[]> =
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
-			error = err;
+			error = requestError(err);
 			return null;
 		});
 
@@ -1570,12 +1571,12 @@ export const createEventWebhook = async (token: string, webhook: Partial<EventWe
 		body: JSON.stringify(webhook)
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
-			error = err;
+			error = requestError(err);
 			return null;
 		});
 
@@ -1602,12 +1603,12 @@ export const updateEventWebhook = async (
 		body: JSON.stringify(webhook)
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
-			error = err;
+			error = requestError(err);
 			return null;
 		});
 
@@ -1629,12 +1630,12 @@ export const deleteEventWebhook = async (token: string, id: string) => {
 		}
 	})
 		.then(async (res) => {
-			if (!res.ok) throw await res.json();
+			if (!res.ok) throw await errorBody(res);
 			return res.json();
 		})
 		.catch((err) => {
 			console.error(err);
-			error = err;
+			error = requestError(err);
 			return null;
 		});
 
