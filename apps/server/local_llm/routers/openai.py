@@ -668,7 +668,7 @@ async def speech(request: Request, user=Depends(get_verified_user)):
             )
 
     except ValueError:
-        raise HTTPException(status_code=401, detail=ERROR_MESSAGES.OPENAI_NOT_FOUND)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_MESSAGES.OPENAI_NOT_FOUND())
 
 
 async def get_all_models_responses(request: Request, user: UserModel) -> list:
